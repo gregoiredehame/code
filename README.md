@@ -3,7 +3,7 @@
 
 <!-- Drag the screenshot into any GitHub comment box, then paste the generated
      https://github.com/user-attachments/assets/... URL over the one below. -->
-![interface](https://github.com/user-attachments/assets/REPLACE-WITH-UPLOADED-IMAGE)
+![interface](<img width="1916" height="1125" alt="Capture d&#39;écran 2026-07-22 210640" src="https://github.com/user-attachments/assets/9d011020-940b-4991-af8e-80889176150c" />)
 
 
 ---
