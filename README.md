@@ -29,8 +29,8 @@
  None beyond Maya itself.
 
  No pip packages, no pymel, no bundled binaries. The whole package imports `maya` and PySide and
- nothing else — including its own Qt wrapper, its own linter, and its own MEL to Python translator,
- written because pymel is gone from Maya 2026.
+ nothing else. That includes its own Qt wrapper, its own linter, and its own MEL to Python
+ translator, written because pymel is gone from Maya 2026.
 
  `pyperclip` is used for the clipboard when it happens to be installed, and quietly ignored when it
  is not.
@@ -45,7 +45,7 @@ from code_editor import main
 main.show()
 ```
 
- Or docked into a Maya panel — it comes back where you left it after a restart:
+ Or docked into a Maya panel. It comes back where you left it after a restart:
 
 ```py
 from code_editor import main
@@ -62,8 +62,8 @@ main.install_menu(before=None)               # at the bottom of General Editors 
 main.install_menu(menu=None, before=None)    # at the bottom of the Windows menu
 ```
 
- If a placement ever goes wrong — dragged off-screen, or tabbed into a panel that no longer exists —
- the gear menu at the foot of the activity bar has **Reset Window Placement**.
+ If a placement ever goes wrong (dragged off-screen, or tabbed into a panel that no longer
+ exists), the gear menu at the foot of the activity bar has **Reset Window Placement**.
 
 
  Feature Comparison
@@ -259,7 +259,7 @@ main.install_menu(menu=None, before=None)    # at the bottom of the Windows menu
  The editor also runs as a panel inside a larger tool: a chrome-less editor scoped to a workspace,
  with the file tree replaced by the host's own tree.
 
- `manager/` is that bridge, and it is the **only** part of this package that reaches outside it —
+ `manager/` is that bridge, and it is the **only** part of this package that reaches outside it:
  it imports the host's own helpers, so it works only when the package is installed inside one.
  Everything under `core/` and `window.py` depends on nothing but Maya and PySide, and the editor
  loads perfectly well with `manager/` absent or unimportable.
