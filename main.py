@@ -1,16 +1,16 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.main
-Execute: from kata.ui.code_editor import main
+Module: code_editor.main
+Execute: from code_editor import main
 
-Entry point for the standalone code editor window (dockable). Mirrors the kata tool convention
-(anim_library/main.py): a show()/close() pair driving a Maya workspaceControl.
+Entry point for the standalone code editor window (dockable). Mirrors the host convention
+a show()/close() pair driving a Maya workspaceControl.
 """
 
-# built on the self-contained engine in code.core (no dependency on the rest of kata)
+# built on the self-contained engine in core (no dependency on the rest of the host)
 from .core import qt
 from .core import dock
 from . import window
@@ -19,10 +19,21 @@ __dockable__ = dock.__dockable__
 screen_width, screen_height = dock.screen_size()
 
 
+def _entry(call:str) -> str:
+    """A one-liner maya can run later to reach this module.
+
+    Derived from `__name__` rather than written out, so the package works wherever it is installed:
+    on its own as `code_editor`, or nested inside a larger tool. Maya stores these strings in the
+    workspace prefs and runs them at the NEXT launch - a hard-coded path would break the moment the
+    package moved, and the failure would surface a restart later, far from the cause.
+    """
+    return "import %s as main; main.%s" % (__name__, call)
+
+
 def _reload_modules() -> None:
     """Reload the editor stack so code changes apply on the next open without restarting Maya.
 
-    The list itself lives in the package, so this entry point and kata_manager's cannot drift apart.
+    The list itself lives in the package, so this entry point and the host's cannot drift apart.
     """
     from . import reload_stack
     reload_stack()
@@ -71,13 +82,13 @@ def show(parent:str=None, width:int=None, height:int=None, restore:bool=None) ->
             # retain=True is what makes maya write the control into the workspace prefs and rebuild
             # it on the next launch by running uiScript. With retain=False it was thrown away on exit.
             widthProperty="preferred", width=w, height=h, retain=True,
-            uiScript="import kata.ui.code_editor.main as main; main.show(restore=True)",
-            closeCommand="import kata.ui.code_editor.main as main; main.close()",
+            uiScript=_entry("show(restore=True)"),
+            closeCommand=_entry("close()"),
         )
     else:
         instance.show(
             dockable=True, area="right", floating=True, width=w, height=h, retain=True,
-            uiScript="import kata.ui.code_editor.main as main; main.show(restore=True)",
+            uiScript=_entry("show(restore=True)"),
         )
 
     instance.raise_()
@@ -85,7 +96,7 @@ def show(parent:str=None, width:int=None, height:int=None, restore:bool=None) ->
     return instance
 
 
-MENU_ITEM = "kataCodeEditorMenuItem"        # fixed name, so a re-install replaces rather than piles up
+MENU_ITEM = "codeEditorMenuItem"        # fixed name, so a re-install replaces rather than piles up
 WINDOWS_MENU = "MayaWindow|mainWindowMenu"
 
 
@@ -166,7 +177,7 @@ def install_menu(menu:str="General Editors", before:str="Script Editor",
                 continue
 
     options = {"parent": parent, "label": label,
-               "command": "import kata.ui.code_editor.main as main; main.show()"}
+               "command": _entry("show()")}
     if after:
         options["insertAfter"] = after
     return cmds.menuItem(MENU_ITEM, **options)

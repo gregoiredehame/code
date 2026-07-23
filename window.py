@@ -1,14 +1,14 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.window
-Execute: from kata.ui.code_editor import window
+Module: code_editor.window
+Execute: from code_editor import window
 
 The standalone VS-Code-style code editor window: a dockable Maya window with a top menu bar
 (File/Edit/Selection/View/Go/Run), a left sidebar (Workspace / Outline / Timeline), a script tab bar and
-the reused Maya output console. Its own isolated execution namespace (not the shared kata_manager console).
+the reused Maya output console. Its own isolated execution namespace (not the shared the host console).
 """
 
 import os
@@ -22,7 +22,7 @@ import subprocess
 
 from maya.app.general.mayaMixin import MayaQWidgetDockableMixin
 
-# built entirely on the self-contained engine in code.core (no dependency on the rest of kata)
+# built entirely on the self-contained engine in core (no dependency on the rest of the host)
 from .core import qt
 from .core import compat
 from .core import vcs
@@ -36,7 +36,7 @@ from .core import session
 from .core import editor as editor_module
 from .core import console as output_widget
 
-WORKSPACE_OPTIONVAR = "kata_code_editor_workspace_folders"   # json list of folder paths
+WORKSPACE_OPTIONVAR = "code_editor_workspace_folders"   # json list of folder paths
 
 # exact VS Code default gitDecoration.*ResourceForeground values
 _STATUS_COLOR = {
@@ -89,7 +89,7 @@ def diff_hunks(old:str, new:str) -> list:
 # ----------------------------------------------------------------------------------------------- tabs
 
 class Breadcrumbs(qt.QWidget):
-    """The path strip over the editor - VS Code's breadcrumbs: kata > core > constraint.py > build.
+    """The path strip over the editor - VS Code's breadcrumbs: the host > core > constraint.py > build.
 
     Two halves that refresh on different events: the FOLDERS and the file change only when the tab
     does, the SYMBOLS follow the caret. The symbol half is rebuilt only when the enclosing scope
@@ -114,6 +114,15 @@ class Breadcrumbs(qt.QWidget):
         self._row.setContentsMargins(qt.px(8), 0, qt.px(8), 0)
         self._row.setSpacing(0)
         self._row.addStretch(1)
+
+    def minimumSizeHint(self) -> qt.QSize:
+        """Never gate the window's width.
+
+        A row of buttons reports the SUM of their widths as its minimum, so a deep path -
+        `project > ui > code_editor > window.py > Editor > __init__` - became a floor the whole
+        window could not be dragged below. This is chrome: it clips instead.
+        """
+        return qt.QSize(0, super().minimumSizeHint().height())
 
     def _crumb(self, text:str, icon=None, slot=None) -> qt.QToolButton:
         button = qt.QToolButton()
@@ -1133,7 +1142,7 @@ class WorkspacePanel(qt.QWidget):
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
         self.roots = []                         # list of root folder paths (order preserved)
         # an explicit tree replaces the filesystem one when the host has a better structure to show:
-        # kata_manager feeds it the krig's process, so you browse actions in run order rather than
+        # the host feeds it the krig's process, so you browse actions in run order rather than
         # folders. None = the normal workspace, read from disk.
         self.virtual = None
         self._clipboard = None                  # (path, cut) remembered by Cut / Copy
@@ -1361,7 +1370,7 @@ class WorkspacePanel(qt.QWidget):
     def set_tree(self, nodes:list=None) -> None:
         """Show an explicit tree instead of the folders on disk. None restores the normal workspace.
 
-        Each node is {"label", "path", "children"}. A node with no `path` is a pure group (kata_manager
+        Each node is {"label", "path", "children"}. A node with no `path` is a pure group (the host
         uses PRE and POST); a node WITH a path is a file that opens on click and can still have
         children, which is how a process action carries its sub-actions.
 
@@ -3114,7 +3123,7 @@ class TimelinePanel(qt.QWidget):
         return "".join(parts)
 
     def _context_menu(self, pos) -> None:
-        """Right-click a revision: see it, compare it, copy it, open it on the host."""
+        """Right-click a revision: see it, compare it, copy it, open it on GitHub."""
         item = self.tree.itemAt(pos)
         sha = item.data(0, _PATH_ROLE) if item is not None else None
         if not sha:
@@ -3297,6 +3306,15 @@ class StatusBar(qt.QWidget):
         self.runtime.setText("Python %s" % sys.version.split()[0])
         self.set_file(None, "")
 
+    def minimumSizeHint(self) -> qt.QSize:
+        """Never gate the window's width - see Breadcrumbs.minimumSizeHint.
+
+        Ten fields side by side (branch, tallies, position, indentation, encoding, EOL, language,
+        runtime) add up to several hundred pixels of minimum. The fields on the right clip away
+        instead; the ones that matter sit on the left.
+        """
+        return qt.QSize(0, super().minimumSizeHint().height())
+
     def set_busy(self, busy:bool, text:str="") -> None:
         """Spin, with a word for what is going on. Stopping clears the word too."""
         self.spinner.start() if busy else self.spinner.stop()
@@ -3405,6 +3423,9 @@ class SecondaryPanel(qt.QWidget):
         self.tree.header().setSectionResizeMode(0, qt.QHeaderView.Stretch)
         self.tree.header().setSectionResizeMode(1, qt.QHeaderView.ResizeToContents)
         self.tree.header().setSectionResizeMode(2, qt.QHeaderView.ResizeToContents)
+        # a type column sized to its contents ("Length Length Length") would otherwise set a floor
+        # the panel could not be dragged below
+        self.tree.header().setMinimumSectionSize(qt.px(24))
         self.tree.itemDoubleClicked.connect(self._picked)
         self.tree.currentItemChanged.connect(self._row_changed)
         layout.addWidget(self.tree, 1)
@@ -3763,7 +3784,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Args:
             parent:         (QWidget): - parent widget.
             chrome:         (bool):    - False strips the menu bar, activity bar and side bars, leaving
-                                         only the tabs over the panel. That is the shape kata_manager
+                                         only the tabs over the panel. That is the shape the host
                                          embeds: same editor, no file browser of its own.
             session_name:   (str):     - name of the state file, so embedded editors do not collide.
             session_folder: (str):     - where tabs and backups are stored. None = per-user.
@@ -3776,23 +3797,23 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.chrome = chrome
         # the embedded editor must NOT answer to the standalone's name: dock.delete_workspace_instances
         # resolves "Code Editor" through MQtUtil.findControl, which matches ANY widget with that object
-        # name - so opening the standalone window used to close and destroy the one inside kata_manager.
+        # name - so opening the standalone window used to close and destroy the one inside the host.
         self.setObjectName(Editor.title if chrome else "CodeEditorPanel")
         self.setWindowTitle(Editor.title)
         if chrome:
             Editor.window_instance = self       # only the standalone window is the singleton
         self.theme_name = kwargs.get("theme") or "vscode"
         self.theme = qt.theme(self.theme_name)
-        self.setStyleSheet(qt.kata_stylesheet(self.theme_name))
+        self.setStyleSheet(qt.stylesheet(self.theme_name))
 
-        # this window's own execution namespace (isolated from the kata_manager console)
+        # this window's own execution namespace (isolated from the host console)
         self.namespace = {"__name__": "__main__", "__builtins__": builtins}
 
         main_layout = qt.QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # no kata title header — this is a standalone interface. Just the menu bar on top.
+        # no the host title header — this is a standalone interface. Just the menu bar on top.
         self.menu_bar = qt.QMenuBar()
         # keep the menu bar at its natural height, never stretching down over the window
         self.menu_bar.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Fixed)
@@ -4027,12 +4048,12 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             # Source Control do not: with no activity bar there is no way to reach them anyway.
             self.sidebar.workspace_section.setVisible(True)
             # the other three are hidden, not removed: the view header's "..." brings any of them
-            # back for whoever wants them inside kata_manager
+            # back for whoever wants them inside the host
             self.sidebar.open_section.setVisible(False)
             self.sidebar.outline_section.setVisible(False)
             self.sidebar.timeline_section.setVisible(False)
             self.h_splitter.setSizes([qt.px(230), qt.px(900), 0])
-            # the menu bar stays, emptied of its menus: kata_manager owns File/Edit/..., but the layout
+            # the menu bar stays, emptied of its menus: the host owns File/Edit/..., but the layout
             # toggles live in its corner and are worth keeping. clear() drops the actions, not the
             # corner widget - and not the shortcuts either, which are QShortcuts on the window.
             self.menu_bar.clear()
@@ -4461,7 +4482,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # This rides in the session store rather than in a pile of optionVars. It is the same thing a
     # Maya optionVar would give you - a value that outlives the window - but it is already atomic,
     # already per-editor, and it keeps the standalone window's layout from being the same slot as
-    # the panel embedded in kata_manager. The font size stays on its own optionVar, in the engine,
+    # the panel embedded in the host. The font size stays on its own optionVar, in the engine,
     # because the engine is used outside this window too.
 
     def _layout_state(self) -> dict:
@@ -4530,7 +4551,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             if "trim_on_save" in state:
                 self._toggle_trim(bool(state["trim_on_save"]))
             self._sync_argument_completion()     # the restored panel decides it
-            # only the standalone owns its geometry: embedded, kata_manager decides the size
+            # only the standalone owns its geometry: embedded, the host decides the size
             window = state.get("window") or []
             if self.chrome and len(window) == 4:
                 x, y, width, height = (int(v) for v in window)
@@ -4605,12 +4626,12 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                 "layout": self._layout_state()}
         store.save(data)
         store.sweep(keep)                                 # drop backups of tabs that are gone
-        self.sessionStored.emit(data)                     # let an embedder mirror it (kata_manager)
+        self.sessionStored.emit(data)                     # let an embedder mirror it (the host)
 
     def set_session_folder(self, folder:str, name:str=None, enabled:bool=True) -> None:
         """Point the editor at another state store and reopen from it.
 
-        kata_manager calls this on every krig switch. The order matters: the tabs of the workspace you
+        the host calls this on every krig switch. The order matters: the tabs of the workspace you
         are LEAVING are flushed to its own store first, so coming back to it later restores them - open
         tabs, carets and unsaved buffers alike - even though nothing was saved or closed.
 
@@ -5745,7 +5766,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         menu.addSeparator()
 
         themes = menu.addMenu("Themes")
-        for name, label in (("vscode", "Dark (VS Code)"), ("kata", "Dark (kata)")):
+        for name, label in (("vscode", "Dark (VS Code)"), ("the host", "Dark (the host)")):
             action = themes.addAction(label)
             action.setCheckable(True)
             action.setChecked(self.theme_name == name)
@@ -5781,7 +5802,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             return
         self.theme_name = name
         self.theme = qt.theme(name)
-        self.setStyleSheet(qt.kata_stylesheet(name))
+        self.setStyleSheet(qt.stylesheet(name))
         self._apply_theme()
         for index in range(self.tabs.count()):
             code = getattr(self.tabs.widget(index), "code", None)

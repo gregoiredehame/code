@@ -1,11 +1,11 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
 Modified: Jul 08, 2026
-Module: ui.code_editor.manager.workspace
-Execute: from kata.ui.code_editor.manager import workspace
+Module: code_editor.manager.workspace
+Execute: from code_editor.manager import workspace
 """
 
 from .... import util

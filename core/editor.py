@@ -1,14 +1,14 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Oct 27, 2023
 Modified: Jul 08, 2026
-Module: ui.code_editor.core.editor
-Execute: from kata.ui.code_editor.core import editor
+Module: code_editor.core.editor
+Execute: from code_editor.core import editor
 """
 
-# self-contained: the editor engine imports nothing from the rest of kata (only its sibling core modules).
+# self-contained: the editor engine imports nothing from the rest of the host (only its sibling core modules).
 from . import qt
 from . import compat as kcore          # kcore.folder.read / kcore.message.prompt shims
 from . import compat as util           # util.copy / util.scale_dpi shims
@@ -85,7 +85,7 @@ def _bracket_span(text:str, start:int, end:int) -> tuple:
 def _surface(fallback:"qt.QColor", override:str=None) -> "qt.QColor":
     """The surface to paint on: a per-widget `override` first, then the module one, then `fallback`.
 
-    The per-widget override exists so the standalone window and the editor embedded in kata_manager
+    The per-widget override exists so the standalone window and the editor embedded in the host
     can run different themes at the same time - a module global alone would let whichever was built
     last decide for both.
     """
@@ -94,7 +94,7 @@ def _surface(fallback:"qt.QColor", override:str=None) -> "qt.QColor":
 # One persistent namespace shared by every "Execute" in the editor, kept SEPARATE from this module's
 # globals so user code can never rebind the editor's own names (re, os, qt, ...) and corrupt the editor.
 # It behaves like Maya's own script editor: state persists between runs, __name__ is "__main__".
-KATA_CONSOLE_NAMESPACE = {"__name__": "__main__", "__builtins__": builtins}
+CONSOLE_NAMESPACE = {"__name__": "__main__", "__builtins__": builtins}
 
 def create_signal(*arg_list) -> qt.signal:
     """Create and return a Qt signal carrying the given argument types.
@@ -400,8 +400,8 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Args:
             file_temp: (str):  - path to the temporary autosave file.
             file_path: (str):  - path to the script file being edited.
-            namespace: (dict): - execution namespace for this editor. None = the shared kata console
-                                 namespace (default, kata_manager behaviour); pass a fresh dict for an
+            namespace: (dict): - execution namespace for this editor. None = the shared the host console
+                                 namespace (default, the host behaviour); pass a fresh dict for an
                                  isolated console (e.g. the standalone editor).
             minimap:   (bool): - True adds the VS Code-style minimap strip on the right.
             surface:   (str):  - the code area's background colour.
@@ -413,8 +413,8 @@ class CodeTextEdit(qt.QPlainTextEdit):
         """
         self.file_path = file_path
         self.file_temp = file_temp
-        # per-instance execution namespace: isolated when one is given, shared kata console otherwise
-        self.namespace = namespace if namespace is not None else KATA_CONSOLE_NAMESPACE
+        # per-instance execution namespace: isolated when one is given, shared the host console otherwise
+        self.namespace = namespace if namespace is not None else CONSOLE_NAMESPACE
         self.shearch_and_replace = []
         self.search_selections = []
 
@@ -2182,7 +2182,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
     def execute(self, text:str=None) -> None:
         """Compile and run `text` as Python in the shared console namespace, safely.
 
-        User code runs in KATA_CONSOLE_NAMESPACE (never this module's globals), so it cannot corrupt the
+        User code runs in CONSOLE_NAMESPACE (never this module's globals), so it cannot corrupt the
         editor. Compile errors and runtime exceptions are caught and printed as a clean traceback instead of
         propagating out of a Qt event handler (which would be swallowed or destabilise the UI).
 
@@ -2197,7 +2197,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
         # echo the executed code to the output (like Maya's script editor shows the command it ran)
         sys.stdout.write(text if text.endswith("\n") else text + "\n")
         try:
-            code = compile(text, "<kata>", "exec")
+            code = compile(text, "<the host>", "exec")
         except SyntaxError:
             sys.stderr.write(traceback.format_exc())
             return
@@ -2218,7 +2218,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.execute(self.textCursor().selection().toPlainText())
 
     
-    FONT_OPTIONVAR = "kata_code_font_size"     # persisted editor font size (Maya optionVar)
+    FONT_OPTIONVAR = "code_editor_font_size"     # persisted editor font size (Maya optionVar)
     MAX_OCCURRENCES = 60                       # past this a name is too common for the highlight to help
 
     def apply_font_size(self, size:int=None, persist:bool=True) -> None:
@@ -2799,7 +2799,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
         """Ask the host to save this buffer under a new name.
 
         Like clicked_menu_save this only EMITS: the widget has no idea where a script belongs - the
-        standalone window writes straight to disk, kata_manager writes through its workspace.
+        standalone window writes straight to disk, the host writes through its workspace.
         """
         self.flush_autosave()
         self.savingScriptAs.emit(True)
@@ -2940,7 +2940,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
 class CodeCompleter(qt.QCompleter):
     """Namespace-aware completer built on the stdlib rlcompleter.
 
-    Completions come from the LIVE console namespace (KATA_CONSOLE_NAMESPACE, where the editor executes
+    Completions come from the LIVE console namespace (CONSOLE_NAMESPACE, where the editor executes
     code) plus the builtins, so it completes anything that actually exists: your own variables and
     functions, imported modules (cmds, kcore, ...), chained attributes (cmds.polyCube().<tab>), self.,
     keyword args, etc. rlcompleter introspects real objects — for 'a.b.c' it evaluates only the object
@@ -2975,7 +2975,7 @@ class CodeCompleter(qt.QCompleter):
         """Paint the popup in the editor's OWN palette and at the editor's OWN font size.
 
         Both were hard-coded, which showed: the standalone window runs the vscode palette and the
-        embedded panel the kata one, and the popup drew kata blue in both. The font ignored Ctrl+wheel
+        embedded panel the host one, and the popup drew the other palette's blue in both. The font ignored Ctrl+wheel
         for the same reason, so the list stayed 9pt over text the user had zoomed to 16.
         """
         popup = self.popup()
@@ -3008,11 +3008,11 @@ class CodeCompleter(qt.QCompleter):
 
     def _namespace(self) -> dict:
         """The namespace to introspect: the editor's own console namespace (isolated or shared), plus
-        builtins. Falls back to the shared kata console namespace when no editor is attached yet."""
+        builtins. Falls back to the shared the host console namespace when no editor is attached yet."""
         ns = dict(vars(builtins))
         editor = self.widget()
         try:
-            ns.update(getattr(editor, "namespace", None) or KATA_CONSOLE_NAMESPACE)
+            ns.update(getattr(editor, "namespace", None) or CONSOLE_NAMESPACE)
         except Exception:
             pass
         return ns

@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.palette
-Execute: from kata.ui.code_editor.core import palette
+Module: code_editor.core.palette
+Execute: from code_editor.core import palette
 
 VS Code's Command Palette: type a few letters, get the command, run it.
 

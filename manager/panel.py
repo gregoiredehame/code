@@ -1,24 +1,24 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
 Modified: Jul 22, 2026
-Module: ui.code_editor.manager.panel
-Execute: from kata.ui.code_editor.manager import panel
+Module: code_editor.manager.panel
+Execute: from code_editor.manager import panel
 
-The code editor as it lives inside kata_manager's "Codes" tab.
+The code editor as it lives inside the host's "Codes" tab.
 
 It is the SAME editor as the standalone window, built with chrome=False: the tabs over the panel
 (PROBLEMS / OUTPUT / DEBUG CONSOLE) and nothing else - no menu bar, no activity bar, no Explorer or
-Source Control. kata_manager already owns the file browsing, so the editor only has to edit.
+Source Control. the host already owns the file browsing, so the editor only has to edit.
 
 Everything it remembers lives INSIDE the krig workspace, under codes/:
 
     codes/session.json   open tabs, their order, the active one, and where each caret was
     codes/backups/       the live buffer of every tab with unsaved work
     codes/data.json      the same tab list in the historical {temp: [title, script]} shape, kept so
-                         kata_manager's path migration (ui.update_paths) keeps working unchanged
+                         the host's path migration (ui.update_paths) keeps working unchanged
 
 That makes the editing non-destructive on two levels: the script on disk is never touched until you
 hit Ctrl+S (and then through an atomic write, see core.session.write_atomic), and what you typed but
@@ -50,7 +50,7 @@ def _rel(path:str, root:str) -> str:
 
 
 class Widget(qt.QWidget):
-    """kata_manager's Codes tab: the editor bound to the current krig workspace."""
+    """the host's Codes tab: the editor bound to the current krig workspace."""
 
     def __init__(self, parent=None, **kwargs) -> None:
         """Build the panel, optionally bound to a workspace given as a `workspace` keyword."""
@@ -69,7 +69,7 @@ class Widget(qt.QWidget):
         # session_enabled=False until update_workspace binds it: with no krig there is nothing to
         # remember, and it must not read or write the standalone window's per-user state.
         self.editor = editor_window.Editor(parent=self, chrome=False, session_name="session",
-                                           session_folder=None, session_enabled=False, theme="kata")
+                                           session_folder=None, session_enabled=False, theme="the host")
         self.editor.sessionStored.connect(self._mirror_data_json)
         layout.addWidget(self.editor)
 
@@ -80,7 +80,7 @@ class Widget(qt.QWidget):
     def alive(self) -> bool:
         """True while the embedded editor's C++ side is still there.
 
-        kata_manager keeps calling into this panel on every tab click, and a Maya reload or a stray
+        the host keeps calling into this panel on every tab click, and a Maya reload or a stray
         deleteUI can take the editor out from under it. Touching a dead widget raises, and that
         traceback surfaces as a broken manager rather than as a missing editor.
         """
@@ -206,7 +206,7 @@ class Widget(qt.QWidget):
     def _mirror_data_json(self, data:dict) -> None:
         """Mirror the editor's tab list into codes/data.json, in its historical shape.
 
-        kata_manager rewrites that file to keep every path relative when a project moves
+        the host rewrites that file to keep every path relative when a project moves
         (ui.update_paths), and it expects exactly {temp: [title, script]}. Writing it here keeps that
         contract while session.json carries the details the old format could not hold.
         """
@@ -226,7 +226,7 @@ class Widget(qt.QWidget):
         except Exception:
             kcore.json.write(self.workspace, mirror)
 
-    # ------------------------------------------------------------------ kata_manager API
+    # ------------------------------------------------------------------ the host API
 
     def open_file(self, file_path:str=None) -> None:
         """Open a script in a pinned tab.
@@ -305,7 +305,7 @@ class Widget(qt.QWidget):
         self.editor.problems.refresh()
 
     def closeEvent(self, event) -> None:
-        """Flush the session before kata_manager goes away, rather than waiting on the debounce."""
+        """Flush the session before the host goes away, rather than waiting on the debounce."""
         try:
             self.editor._store_session()
         except Exception:

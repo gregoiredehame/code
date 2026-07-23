@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.languages
-Execute: from kata.ui.code_editor.core import languages
+Module: code_editor.core.languages
+Execute: from code_editor.core import languages
 
 Syntax colouring for the languages that do not need a hand-written parser (C/C++, json, PowerShell,
 markdown, xml, yaml/ini). Python and MEL keep their dedicated highlighters in `editor`; `attach()` picks

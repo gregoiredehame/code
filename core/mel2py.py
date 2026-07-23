@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.mel2py
-Execute: from kata.ui.code_editor.core import mel2py
+Module: code_editor.core.mel2py
+Execute: from code_editor.core import mel2py
 
 MEL to Python translation with no third-party dependency - pymel's mel2py is gone from Maya 2026, and
 it was the only reason this package needed pymel at all.

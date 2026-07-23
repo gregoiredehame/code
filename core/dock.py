@@ -1,19 +1,19 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.core.dock
-Execute: from kata.ui.code_editor.core import dock
+Module: code_editor.core.dock
+Execute: from code_editor.core import dock
 
-Self-contained Maya workspaceControl helpers so `code/` needs nothing from kata's ui.util. Provides only
+Self-contained Maya workspaceControl helpers so `code/` needs nothing from the host's ui.util. Provides only
 what the standalone entry point uses: screen size, dockable-panel map, and the create / delete / restore
 workspace-control lifecycle.
 """
 
 from . import qt
 
-# tab-index hint per Maya panel when tabbing the control into it (mirrors kata.ui.__dockable__)
+# tab-index hint per Maya panel when tabbing the control into it (one entry per dockable Maya panel)
 __dockable__ = {
     "AttributeEditor": -1,
     "ChannelBoxLayerEditor": -1,

@@ -1,12 +1,12 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.core.compat
-Execute: from kata.ui.code_editor.core import compat
+Module: code_editor.core.compat
+Execute: from code_editor.core import compat
 
-Tiny self-contained helpers so `code/` needs nothing from kata's core/util. Provides the few utilities the
+Tiny self-contained helpers so `code/` needs nothing from the host's core/util. Provides the few utilities the
 editor/output use: read a text file, an input prompt, clipboard copy, and a DPI scale.
 """
 
@@ -15,7 +15,7 @@ from . import qt
 
 
 class folder:
-    """kata.core.folder shim (only what the editor uses)."""
+    """folder helpers (only what the editor uses)."""
 
     @staticmethod
     def read(path:str=None) -> str:
@@ -42,7 +42,7 @@ class folder:
 
 
 class message:
-    """kata.core.message shim (only what the editor uses).
+    """message helpers (only what the editor uses).
 
     Every dialog takes a `parent`, and every caller passes the widget it was raised from. That is not
     politeness: a Qt stylesheet travels down the PARENT chain, so a dialog created with parent=None
@@ -106,7 +106,7 @@ class message:
 
 
 def copy(string:str=None) -> None:
-    """Copy `string` to the system clipboard (kata.ui.util.copy replacement)."""
+    """Copy `string` to the system clipboard (a host-independent clipboard helper)."""
     try:
         import pyperclip
         pyperclip.copy(string or "")
@@ -120,5 +120,5 @@ def copy(string:str=None) -> None:
 
 
 def scale_dpi(value):
-    """Multiply a value by Maya's DPI scale (kata.ui.util.scale_dpi replacement)."""
+    """Multiply a value by Maya's DPI scale (a host-independent DPI helper)."""
     return round(value * qt.scale_multiplier)

@@ -1,14 +1,14 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.core.vcs
-Execute: from kata.ui.code_editor.core import vcs
+Module: code_editor.core.vcs
+Execute: from code_editor.core import vcs
 
 Tiny, self-contained Git-status helper for the workspace tree (VS Code-style M/A/U/D/R markers). Runs
 `git status --porcelain` under a folder and returns a {absolute_path: status_letter} map. No dependency on
-the rest of kata; degrades silently to an empty map when the folder is not a git repo or git is missing.
+the rest of the host; degrades silently to an empty map when the folder is not a git repo or git is missing.
 """
 
 import os

@@ -1,17 +1,17 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.signature
-Execute: from kata.ui.code_editor.core import signature
+Module: code_editor.core.signature
+Execute: from code_editor.core import signature
 
 What a callable takes, described for the Quick Help panel.
 
 Maya's own Quick Help only knows `cmds`. This knows two sources and prefers the richer one:
 
     a python callable   -> inspect.signature: parameter names, ANNOTATIONS, defaults, and the
-                           docstring. That covers your own kata functions, which Maya's help cannot
+                           docstring. That covers your own the host functions, which Maya's help cannot
                            see at all.
     a maya command      -> `cmds.help(name)`, parsed into flags with their argument types. Those are
                            C functions: they have no python signature, and inspect returns nothing.
@@ -30,7 +30,7 @@ _TYPE = re.compile(r"^[A-Za-z][\w|.\[\]]*$")
 _CACHE = {}                    # {command: [(short, long, types)]}, maya's help is slow to re-ask
 
 # a section header in a docstring, and one argument row under it. The row form is the one used
-# across kata - "name:    (type): - what it is" - with the type and the dash both optional, so a
+# across the host - "name:    (type): - what it is" - with the type and the dash both optional, so a
 # plainer Google-style docstring is read just as well.
 _SECTION = re.compile(r"^\s*(Args|Arguments|Parameters|Keyword Args)\s*:\s*$", re.I)
 _OTHER_SECTION = re.compile(r"^\s*(Returns|Raises|Yields|Examples?|Notes?|Attributes)\s*:\s*$", re.I)
@@ -149,7 +149,7 @@ def return_of(obj, doc:str) -> str:
 
     Three, in order of trust: the python return annotation, maya's own "Return value: string[]"
     line, and finally the type at the head of a Google-style `Returns:` block - which is the shape
-    used across kata.
+    used across the host.
     """
     if inspect.isclass(obj):
         return getattr(obj, "__name__", "")

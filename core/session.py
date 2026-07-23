@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.session
-Execute: from kata.ui.code_editor.core import session
+Module: code_editor.core.session
+Execute: from code_editor.core import session
 
 Persistence for the editor: which tabs were open, and a backup of whatever was typed but not saved.
 
@@ -31,7 +31,7 @@ def _root() -> str:
     """The per-user directory holding the editor's state (created on demand)."""
     base = (os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_STATE_HOME")
             or os.path.expanduser("~"))
-    return os.path.join(base, "kata", "code_editor")
+    return os.path.join(base, "the host", "code_editor")
 
 
 def write_atomic(path:str, text:str) -> None:
@@ -42,7 +42,7 @@ def write_atomic(path:str, text:str) -> None:
     the change atomic: readers see either the old file or the new one, never a half of either.
     """
     folder = os.path.dirname(os.path.abspath(path)) or "."
-    temp = os.path.join(folder, ".%s.kata-tmp" % os.path.basename(path))
+    temp = os.path.join(folder, ".%s.the host-tmp" % os.path.basename(path))
     try:
         with open(temp, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
@@ -61,7 +61,7 @@ class Session(object):
     """The state of one editor, keyed by `name` so several can coexist in the same folder.
 
     `folder` decides WHERE the state lives, and that is the whole difference between the two editors:
-    the standalone window keeps it per-user, while the kata_manager panel points it at the krig
+    the standalone window keeps it per-user, while the host panel points it at the krig
     workspace so the backups travel with the project instead of with the machine.
     """
 

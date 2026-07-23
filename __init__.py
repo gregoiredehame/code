@@ -1,24 +1,24 @@
 """
-KATA. (c)
+CODE EDITOR. (c)
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
 Modified: Jul 21, 2026
-Module: ui.code_editor
-Execute: from kata.ui.kata_manager import code
+Module: code_editor
+Execute: import code_editor
 
 Code editor package:
 
     main.py      Entry point for the standalone window: show() / close() driving a Maya workspaceControl.
-                 Opened with:  from kata.ui import main ; main.code_editor()
+                 Opened with:  from code_editor import main ; main.show()
     window.py    The standalone window itself (Editor): File/Edit/View/Run menu, file-tree sidebar,
                  direct-to-disk files, isolated namespace. Built only on core/.
 
     core/        The self-contained editor engine (CodeTextEdit, output console, PySide wrapper, dialog
                  and workspaceControl shims, session store, icons). Imports NOTHING from the rest of
-                 kata, so it can be reused - or lifted out - freely.
+                 the host, so it can be reused - or lifted out - freely.
 
-    manager/     The code editor as it lives inside kata_manager's "Codes" tab. It is the SAME
+    manager/     The code editor as it lives inside the host's "Codes" tab. It is the SAME
                  window.Editor built with chrome=False - tabs over the panel, no menu bar, no activity
                  bar, no Explorer or Source Control - with its session pointed at the krig workspace,
                  so open tabs and unsaved buffers live under codes/ and travel with the project.
@@ -33,12 +33,23 @@ core/lint.py, a scope-aware checker written on the standard `ast` module and val
 (same findings on undefined names, unused imports and unused locals, with no extra false positive).
 """
 
+import sys
+
+# "code_editor" : alias this module so `import code_editor` and `from code_editor import ...` resolve
+# to this exact package, whatever folder it is nested in. The sub-modules already do `from . import
+# ...`, so relative imports keep working; only the top-level name gets the short alias. Registering it
+# on the package itself means the alias exists however the package is first imported.
+#
+# setdefault, not assignment: a real top-level install of the same name must win over this one, or
+# two copies of the package would end up loaded side by side under one name.
+sys.modules.setdefault("code_editor", sys.modules[__name__])
+
 
 def reload_stack(verbose:bool=True) -> None:
     """Reload the whole editor package, in dependency order, without restarting Maya.
 
     Both entry points need this and neither may keep its own list, or one of them silently runs stale
-    code: the standalone window (main.show) and kata_manager, which caches `code.manager.panel` from
+    code: the standalone window (main.show) and the host, which caches `code.manager.panel` from
     the first launch and would otherwise never see an edit at all.
 
     Failures are printed, never swallowed: a reload that fails halfway leaves the OLD module in memory,
@@ -72,8 +83,16 @@ def reload_stack(verbose:bool=True) -> None:
 
     from .core import editor, console        # named below, after everything has been reloaded
     from . import window
-    from .manager import workspace, panel
-    modules += [window, workspace, panel]    # then the window, then what embeds it
+    modules.append(window)                   # then the window
+
+    # then the host bridge, IF there is a host. `manager/` is the only part of this package that
+    # reaches outside it, so a standalone install has nothing for it to import - and a missing
+    # bridge must not stop the editor itself from reloading.
+    try:
+        from .manager import workspace, panel
+        modules += [workspace, panel]
+    except ImportError:
+        pass
 
     for module in modules:
         try:

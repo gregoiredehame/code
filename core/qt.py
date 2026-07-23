@@ -1,12 +1,12 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.core.qt
-Execute: from kata.ui.code_editor.core import qt
+Module: code_editor.core.qt
+Execute: from code_editor.core import qt
 
-Self-contained Qt binding wrapper for the code editor package, so `code/` has NO dependency on kata's
+Self-contained Qt binding wrapper for the code editor package, so `code/` has NO dependency on the host's
 ui/qt.py. Detects PySide6 (Maya 2025+) or PySide2, star-imports its widgets/gui, exposes QtCore and a
 binding string (__qt__), and a binding-agnostic signal() factory.
 """
@@ -85,7 +85,7 @@ def is_valid(obj:object) -> bool:
 
 # Every surface the editor paints, by role rather than by colour, so the same widgets can render in
 # two skins. The standalone window keeps the VS Code look it was designed around; the editor embedded
-# in kata_manager takes kata's own palette so it does not read as a foreign application inside it.
+# in the host takes the host's own palette so it does not read as a foreign application inside it.
 #
 # Themes are resolved PER EDITOR, never globally: both can be open at once, and a module-level theme
 # would leave whichever was built last dictating the look of the other.
@@ -108,7 +108,7 @@ THEMES = {
         "scroll":    "#424242",
         "textsel":   "#264f78",   # selected text inside an editor
     },
-    "kata": {
+    "the host": {
         "editor":    "#2b2b2b",
         "panel":     "#303030",
         "rule":      "#3a3a3a",
@@ -176,7 +176,7 @@ def symbol_icon(kind:str) -> "QIcon":
     return _SYMBOL_CACHE[kind]
 
 
-def kata_stylesheet(name:str=None) -> str:
+def stylesheet(name:str=None) -> str:
     """The editor's stylesheet, rendered in the palette called `name` (see THEMES).
 
     Every surface comes from the palette, and every panel background lives HERE rather than in an
