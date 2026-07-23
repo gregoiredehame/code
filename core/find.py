@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.find
-Execute: from kata.ui.code_editor.core import find
+Module: code_editor.core.find
+Execute: from code_editor.core import find
 
 VS Code's find widget: a small panel that FLOATS over the top-right of the editor instead of sitting
 in a bar underneath it. That placement is the whole point - the bar at the bottom pushes the text up

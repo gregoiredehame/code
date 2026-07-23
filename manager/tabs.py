@@ -1,11 +1,11 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
 Modified: Jul 08, 2026
-Module: ui.code_editor.manager.tabs
-Execute: from kata.ui.code_editor.manager import tabs
+Module: code_editor.manager.tabs
+Execute: from code_editor.manager import tabs
 """
 
 from functools import partial

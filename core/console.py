@@ -1,11 +1,11 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
 Modified: Jul 08, 2026
-Module: ui.code_editor.core.console
-Execute: from kata.ui.code_editor.core import console
+Module: code_editor.core.console
+Execute: from code_editor.core import console
 """
 
 import re, os
@@ -17,7 +17,7 @@ from functools import partial
 import maya.OpenMaya as om
 import maya.cmds as cmds
 
-# self-contained: no dependency on the rest of kata (only its sibling core modules)
+# self-contained: no dependency on the rest of the host (only its sibling core modules)
 from . import qt
 __icons__ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 

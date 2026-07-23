@@ -1,10 +1,10 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Module: ui.code_editor.core.lint
-Execute: from kata.ui.code_editor.core import lint
+Module: code_editor.core.lint
+Execute: from code_editor.core import lint
 
 Scope-aware static checks for the Problems panel, written on the standard `ast` module so nothing has to
 be installed into Maya.

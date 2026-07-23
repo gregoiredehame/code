@@ -1,5 +1,5 @@
 """
-KATA. (c)
+CODE EDITOR. (c)
 
 Author: Gregoire Dehame
 Module: ui.code_editor.core.seti_map

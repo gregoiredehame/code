@@ -1,13 +1,13 @@
 """
-KATA. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Module: ui.code_editor.core
-Execute: from kata.ui.code_editor import core
+Module: code_editor.core
+Execute: from code_editor import core
 
-Self-contained editor engine: the reusable pieces both the standalone window and the kata_manager panel
-build on, with NO dependency on the rest of kata. Modules:
+Self-contained editor engine: the reusable pieces both the standalone window and the host panel
+build on, with NO dependency on the rest of the host. Modules:
 
     qt       - PySide binding wrapper (PySide6/2 detection, signal(), wrap_instance(), stylesheet, DPI).
     compat   - I/O + dialog shims (folder.read/write, message.prompt/critical/warning/file/save, copy).
