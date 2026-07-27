@@ -10,7 +10,6 @@ Tiny self-contained helpers so `code/` needs nothing from the host's core/util. 
 editor/output use: read a text file, an input prompt, clipboard copy, and a DPI scale.
 """
 
-import os
 from . import qt
 
 

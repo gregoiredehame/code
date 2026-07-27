@@ -208,9 +208,13 @@ class _Checker(ast.NodeVisitor):
         scope.bind(binding)
 
     def _resolve(self, name, node):
-        """Mark `name` used along the scope chain; report it when nothing binds it."""
-        if name in _BUILTINS:
-            return
+        """Mark `name` used along the scope chain; report it when nothing binds it.
+
+        The scope chain is walked FIRST, builtins only after. Short-cutting on the builtin name, as
+        this did, meant a local that shadows one never had its use recorded: `for a, b, format in
+        rules: setFormat(..., format)` reported `format` as assigned and never used, because every
+        read of it resolved to the builtin instead of to the loop variable.
+        """
         for scope in reversed(self.scopes):
             # a class body is not visible from the scopes nested inside it
             if scope.kind == "class" and scope is not self.scope:
@@ -221,6 +225,8 @@ class _Checker(ast.NodeVisitor):
                 return
             if scope.star_import:
                 return                       # `from x import *`: cannot know, stay silent
+        if name in _BUILTINS:
+            return                           # nothing local binds it, so it really is the builtin
         if self._any_star_import:
             return
         self.problems.append(_problem(node.lineno, node.col_offset, ERROR,

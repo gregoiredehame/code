@@ -32,7 +32,7 @@ from ..core import qt
 from ..core import session as session_module
 from .. import window as editor_window
 from . import workspace as util
-from ..... import core as kcore
+from .... import core as kcore
 
 log = logging.getLogger("code")
 log.setLevel(logging.INFO)
@@ -68,8 +68,11 @@ class Widget(qt.QWidget):
         # parented straight away: an unparented Editor would flash as a top-level window first.
         # session_enabled=False until update_workspace binds it: with no krig there is nothing to
         # remember, and it must not read or write the standalone window's per-user state.
+        # lock_theme: kata_manager's Codes page is always the kata ("the host") palette by default,
+        # and a saved session must not restore a different one.
         self.editor = editor_window.Editor(parent=self, chrome=False, session_name="session",
-                                           session_folder=None, session_enabled=False, theme="the host")
+                                           session_folder=None, session_enabled=False,
+                                           lock_theme="the host")
         self.editor.sessionStored.connect(self._mirror_data_json)
         layout.addWidget(self.editor)
 

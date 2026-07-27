@@ -513,23 +513,3 @@ class Highlighter(qt.QSyntaxHighlighter):
 
 
 
-    '''
-    def highlightBlock(self, text):
-        """apply syntax highlighting to the given block of text."""
-
-        self.tripleQuoutesWithinStrings = []
-        for expression, nth, format in self.rules:
-            index = expression.indexIn(text, 0)
-
-            while index >= 0:
-                if index in self.tripleQuoutesWithinStrings:
-                    index += 1
-                    expression.indexIn(text, index)
-                    continue
-
-                index = expression.pos(nth)
-                length = len(expression.cap(nth))
-                self.setFormat(index, length, format)
-                index = expression.indexIn(text, index + length)
-
-        self.setCurrentBlockState(0)'''

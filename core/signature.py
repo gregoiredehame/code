@@ -225,19 +225,3 @@ def describe(name:str, obj) -> dict:
                 "returns": return_of(obj, doc),
                 "note": "%d parameter%s" % (len(parameters), "" if len(parameters) == 1 else "s")}
     return {}
-
-
-def signature_text(info:dict) -> str:
-    """The one-line call form, e.g. `build(name:str, parent:str=None)`."""
-    if not info:
-        return ""
-    pieces = []
-    for label, kind, default, _description in info.get("params", []):
-        piece = label
-        if info.get("kind") == "python":
-            if kind:
-                piece += ":" + kind
-            if default:
-                piece += "=" + default
-        pieces.append(piece)
-    return "%s(%s)" % (info.get("name", ""), ", ".join(pieces))

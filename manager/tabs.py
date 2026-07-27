@@ -10,8 +10,8 @@ Execute: from code_editor.manager import tabs
 
 from functools import partial
 
-from .... import __icons__, qt
-from ..... import core as kcore
+from ... import __icons__, qt
+from .... import core as kcore
 
 from ..core import editor
 
@@ -244,8 +244,12 @@ class TabWidget(qt.QTabWidget):
         Args:
             index: (int): - index of the tab to activate.
         """
-        try: self.setCurrentIndex(index)
-        except: pass
+        # Exception, not a bare except: a bare one also catches KeyboardInterrupt and SystemExit,
+        # so a maya shutdown arriving here would be swallowed instead of allowed through
+        try:
+            self.setCurrentIndex(index)
+        except Exception:
+            pass
 
         
     def open_temp(self, file_temp:str=None) -> None:
@@ -508,7 +512,6 @@ class CodeWidget(qt.QWidget):
         Args:
             event: (object): - Qt close event accepted or ignored based on the choice.
         """
-        remove = True
         if os.path.exists(self.file_path) and os.path.exists(self.file_temp):
             if kcore.folder.read(self.file_path) != kcore.folder.read(self.file_temp):
                 confirmation = kcore.message.information("Save", ["Yes", "No", "Cancel"], '"%s" has been modified. Save Changes?       '% os.path.basename(self.file_path))
@@ -521,7 +524,6 @@ class CodeWidget(qt.QWidget):
                     
                 elif confirmation == 2:
                     event.ignore()
-                    remove = False
             else:
                 event.accept()
         else:

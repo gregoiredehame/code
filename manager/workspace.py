@@ -8,10 +8,9 @@ Module: code_editor.manager.workspace
 Execute: from code_editor.manager import workspace
 """
 
-from .... import util
-from ..... import core as kcore
+from ... import util
+from .... import core as kcore
 
-import maya.cmds as cmds
 import os
 
 __data__ = "data"

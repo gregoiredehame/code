@@ -31,6 +31,33 @@ def _icon(name:str) -> "qt.QIcon":
     return qt.QIcon(os.path.join(__icons__, name))
 
 
+def compiled_query(text:str, regex:bool=False, word:bool=False, case:bool=False):
+    """The compiled search pattern, or None when `text` is empty or the regex is invalid.
+
+    Shared by the editor's find panel and the workspace-wide Search view. The two read their options
+    from different widgets, but the rule for turning them into a pattern is one rule, and it lived as
+    a copy in each.
+
+    Args:
+        text:  (str):  - what the user typed.
+        regex: (bool): - True treats `text` as a regular expression rather than a literal.
+        word:  (bool): - True matches whole words only.
+        case:  (bool): - True makes the match case sensitive.
+
+    Returns:
+        re.Pattern: the compiled pattern, or None.
+    """
+    if not text:
+        return None
+    pattern = text if regex else re.escape(text)
+    if word:
+        pattern = r"\b%s\b" % pattern
+    try:
+        return re.compile(pattern, 0 if case else re.IGNORECASE)
+    except re.error:
+        return None
+
+
 _GLYPHS = {}
 
 
@@ -342,16 +369,8 @@ class FindReplace(qt.QWidget):
 
     def _pattern(self) -> "re.Pattern":
         """The compiled query, or None when it is empty or an invalid regular expression."""
-        text = self.field.edit.text()
-        if not text:
-            return None
-        pattern = text if self.regex.isChecked() else re.escape(text)
-        if self.word.isChecked():
-            pattern = r"\b%s\b" % pattern
-        try:
-            return re.compile(pattern, 0 if self.case.isChecked() else re.IGNORECASE)
-        except re.error:
-            return None
+        return compiled_query(self.field.edit.text(), regex=self.regex.isChecked(),
+                              word=self.word.isChecked(), case=self.case.isChecked())
 
     def search(self, *_) -> None:
         """Find every hit, highlight them, and keep the caret's one current."""

@@ -12,7 +12,6 @@ the reused Maya output console. Its own isolated execution namespace (not the sh
 """
 
 import os
-import re
 import sys
 import ast
 import json
@@ -1010,7 +1009,6 @@ class GitStatusDelegate(qt.QStyledItemDelegate):
         rect = qt.QRect(option.rect)
         selected = bool(option.state & qt.QStyle.State_Selected)
         hovered  = bool(option.state & qt.QStyle.State_MouseOver)
-        active   = bool(option.state & qt.QStyle.State_Active)
 
         # ---- full-width row band ----
         # extend the row to the viewport's right edge so hover/selection fill the WHOLE line
@@ -1826,16 +1824,8 @@ class SearchPanel(qt.QWidget):
 
     def _pattern(self):
         """The compiled query, or None when it is empty or an invalid regular expression."""
-        text = self.field.edit.text()
-        if not text:
-            return None
-        pattern = text if self.regex.isChecked() else re.escape(text)
-        if self.word.isChecked():
-            pattern = r"\b%s\b" % pattern
-        try:
-            return re.compile(pattern, 0 if self.case.isChecked() else re.IGNORECASE)
-        except re.error:
-            return None
+        return find.compiled_query(self.field.edit.text(), regex=self.regex.isChecked(),
+                                   word=self.word.isChecked(), case=self.case.isChecked())
 
     def _walk(self):
         """Every file under the current scope: the workspace roots, or one folder."""
@@ -3802,7 +3792,10 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.setWindowTitle(Editor.title)
         if chrome:
             Editor.window_instance = self       # only the standalone window is the singleton
-        self.theme_name = kwargs.get("theme") or "vscode"
+        # lock_theme pins the palette (the host embeds the editor at a fixed theme and a saved session
+        # must not override it); when set it is also the starting theme.
+        self.locked_theme = kwargs.get("lock_theme")
+        self.theme_name = self.locked_theme or kwargs.get("theme") or "vscode"
         self.theme = qt.theme(self.theme_name)
         self.setStyleSheet(qt.stylesheet(self.theme_name))
 
@@ -4053,12 +4046,16 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self.sidebar.outline_section.setVisible(False)
             self.sidebar.timeline_section.setVisible(False)
             self.h_splitter.setSizes([qt.px(230), qt.px(900), 0])
-            # the menu bar stays, emptied of its menus: the host owns File/Edit/..., but the layout
-            # toggles live in its corner and are worth keeping. clear() drops the actions, not the
-            # corner widget - and not the shortcuts either, which are QShortcuts on the window.
+            # the host owns File/Edit/...; here the menu bar carries no menus. Rather than keep an empty
+            # strip just to hold the layout toggles, drop the menu bar entirely and move the toggles into
+            # the code tabs' own right corner - which is where they belong inside the host.
             self.menu_bar.clear()
-            # an emptied menu bar has no action to size itself on, so pin it to the corner's height
-            self.menu_bar.setFixedHeight(max(qt.px(22), self._corner.sizeHint().height() + qt.px(4)))
+            self.menu_bar.setCornerWidget(None)
+            self.menu_bar.setVisible(False)
+            self.tabs.setCornerWidget(self._corner, qt.Qt.TopRightCorner)
+            self._corner.setVisible(True)
+            # lift the toggles a touch so they sit up on the tab row (bottom margin raises them)
+            self._corner.layout().setContentsMargins(0, 0, qt.px(6), qt.px(6))
 
         # reopen where the last run left off, and keep that record in step from now on
         self._session_timer = qt.QTimer(self)
@@ -4542,7 +4539,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             if state.get("view"):
                 self.sidebar.show_view(state["view"])
                 self.activity_bar.select(state["view"])
-            if state.get("theme"):
+            if state.get("theme") and not self.locked_theme:   # a locked theme ignores the session's
                 self.set_theme(state["theme"])
             if "minimap" in state and bool(state["minimap"]) != self.minimap_on:
                 self._toggle_minimap(bool(state["minimap"]))

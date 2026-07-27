@@ -643,7 +643,6 @@ class CodeTextEdit(qt.QPlainTextEdit):
         pen = qt.QPen(qt.QColor(60, 60, 60).lighter(150) if __light__ else qt.QColor(30, 30, 30).lighter(225), 1)
         painter.setPen(pen)
         space_width = self.fontMetrics().horizontalAdvance(' ')
-        indent_width = 4 * space_width
 
         block = self.firstVisibleBlock()
         
@@ -1979,15 +1978,6 @@ class CodeTextEdit(qt.QPlainTextEdit):
                    else self.fontMetrics().width('9'))
         return 30 + advance * digits + qt.px(self.FOLD_COLUMN)   # + the strip the arrows sit in
         
-    """
-    def line_number_width(self):
-        digits = 1
-        max_value = max(1, self.blockCount())
-        while (max_value >= 10):
-            max_value /= 10
-            digits += 1
-        space = 30 + self.fontMetrics().width('9') * digits
-        return space"""
         
     def line_number_highlight(self) -> None:
         """Highlight the current line and reapply any active search selections.
@@ -3641,7 +3631,68 @@ def mel_syntax_styles(name:str) -> qt.QTextCharFormat:
 _STATE_SHIFT = 8
 
 
-class PythonHighlighter(qt.QSyntaxHighlighter):
+class _MultilineStrings:
+    """The triple-quoted string pass, shared by the python and MEL highlighters.
+
+    It lived as a byte-for-byte copy in both classes, so a fix to one silently missed the other. A
+    mixin rather than a common base class: each highlighter still derives from QSyntaxHighlighter
+    directly, and only this one method is held in common.
+    """
+
+    def match_multiline(self, text, delimiter, in_state, style) -> bool:
+        """Highlight a triple-quoted multi-line string spanning block states.
+
+        Args:
+            text:      (str): - text of the current document block.
+            delimiter: (object): - compiled regex matching the string delimiter.
+            in_state:  (int): - block state flagging an open multi-line string.
+            style:     (qt.QTextCharFormat): - format applied to the string.
+
+        Returns:
+            bool: True if the block ends inside a multi-line string.
+        """
+        # low bits only: colour_brackets parks the bracket nesting depth in the high ones. Harmless
+        # where no depth is stored - a state of 0..2 is unchanged by the modulo.
+        if self.previousBlockState() % _STATE_SHIFT == in_state:
+            start, add = 0, 0
+        else:
+            if qt.__qt__ == "pyside6":
+                match = delimiter.match(text)
+                start = match.capturedStart()
+                add = match.capturedLength() if match.hasMatch() else -1
+            else:
+                start = delimiter.indexIn(text)
+                add = delimiter.matchedLength()
+
+            if start in self.tripleQuoutesWithinStrings:
+                return False
+
+        while start >= 0:
+            if qt.__qt__ == "pyside6":
+                end_match = delimiter.match(text, start + add)
+                end = end_match.capturedStart() if end_match.hasMatch() else -1
+                end_length = end_match.capturedLength()
+            else:
+                end = delimiter.indexIn(text, start + add)
+                end_length = delimiter.matchedLength()
+
+            if end >= add:
+                length = end - start + add + end_length
+                self.setCurrentBlockState(0)
+            else:
+                self.setCurrentBlockState(in_state)
+                length = len(text) - start + add
+            self.setFormat(start, length, style)
+
+            if qt.__qt__ == "pyside6":
+                start_match = delimiter.match(text, start + length)
+                start = start_match.capturedStart() if start_match.hasMatch() else -1
+            else:
+                start = delimiter.indexIn(text, start + length)
+
+        return self.currentBlockState() == in_state
+
+class PythonHighlighter(_MultilineStrings, qt.QSyntaxHighlighter):
     """Syntax highlighter that colorizes Python source in the code editor."""
 
     keywords = [
@@ -3664,7 +3715,7 @@ class PythonHighlighter(qt.QSyntaxHighlighter):
     builtins = dir(builtins)
                
 
-    def __init__(self, parent=None, shearch_and_replace=[]) -> None:
+    def __init__(self, parent=None, shearch_and_replace:list=None) -> None:
         """Compile the Python highlighting rules and multi-line string states.
 
         Args:
@@ -3688,7 +3739,7 @@ class PythonHighlighter(qt.QSyntaxHighlighter):
             self.tri_single = (qt.QtCore.QRegExp("'''"), 1, python_syntax_styles('docstring'))
             self.tri_double = (qt.QtCore.QRegExp('"""'), 2, python_syntax_styles('docstring'))
 
-        self.shearch_and_replace = shearch_and_replace
+        self.shearch_and_replace = list(shearch_and_replace or [])
 
         # what colour_brackets treats as "already a literal": a bracket painted in one of these has
         # been claimed by a string or a comment rule, and must not be counted as nesting
@@ -3773,29 +3824,6 @@ class PythonHighlighter(qt.QSyntaxHighlighter):
                     length = len(expression.cap(nth))
                     self.setFormat(index, length, format)
                     index = expression.indexIn(text, index + length)
-            """    
-            # TODO, verify pyside6 convertion
-            index = expression.indexIn(text, 0)
-            if index >= 0:
-                if expression.pattern() in [r'"[^"\\]*(\\.[^"\\]*)*"', r"'[^'\\]*(\\.[^'\\]*)*'"]:
-                    innerIndex = self.tri_single[0].indexIn(text, index + 1)
-                    if innerIndex == -1:
-                        innerIndex = self.tri_double[0].indexIn(text, index + 1)
-
-                    if innerIndex != -1:
-                        tripleQuoteIndexes = range(innerIndex, innerIndex + 3)
-                        self.tripleQuoutesWithinStrings.extend(tripleQuoteIndexes)
-
-            while index >= 0:
-                if index in self.tripleQuoutesWithinStrings:
-                    index += 1
-                    expression.indexIn(text, index)
-                    continue
-                    
-                index = expression.pos(nth)
-                length = len(expression.cap(nth))
-                self.setFormat(index, length, format)
-                index = expression.indexIn(text, index + length)"""
 
         self.setCurrentBlockState(0)
 
@@ -3846,83 +3874,9 @@ class PythonHighlighter(qt.QSyntaxHighlighter):
         """True if the character at `index` was already formatted as a string or a comment."""
         return self.format(index).foreground().color().name() in self._literal_colours
 
-    def match_multiline(self, text, delimiter, in_state, style) -> bool:
-        """Highlight a triple-quoted multi-line string spanning block states.
-
-        Args:
-            text:      (str): - text of the current document block.
-            delimiter: (object): - compiled regex matching the string delimiter.
-            in_state:  (int): - block state flagging an open multi-line string.
-            style:     (qt.QTextCharFormat): - format applied to the string.
-
-        Returns:
-            bool: True if the block ends inside a multi-line string.
-        """
-        # low bits only: colour_brackets parks the bracket nesting depth in the high ones. Harmless
-        # where no depth is stored - a state of 0..2 is unchanged by the modulo.
-        if self.previousBlockState() % _STATE_SHIFT == in_state:
-            start, add = 0, 0
-        else:
-            if qt.__qt__ == "pyside6":
-                match = delimiter.match(text)
-                start = match.capturedStart()
-                add = match.capturedLength() if match.hasMatch() else -1
-            else:
-                start = delimiter.indexIn(text)
-                add = delimiter.matchedLength()
-
-            if start in self.tripleQuoutesWithinStrings:
-                return False
-
-        while start >= 0:
-            if qt.__qt__ == "pyside6":
-                end_match = delimiter.match(text, start + add)
-                end = end_match.capturedStart() if end_match.hasMatch() else -1
-                end_length = end_match.capturedLength()
-            else:
-                end = delimiter.indexIn(text, start + add)
-                end_length = delimiter.matchedLength()
-
-            if end >= add:
-                length = end - start + add + end_length
-                self.setCurrentBlockState(0)
-            else:
-                self.setCurrentBlockState(in_state)
-                length = len(text) - start + add
-            self.setFormat(start, length, style)
-
-            if qt.__qt__ == "pyside6":
-                start_match = delimiter.match(text, start + length)
-                start = start_match.capturedStart() if start_match.hasMatch() else -1
-            else:
-                start = delimiter.indexIn(text, start + length)
-
-        """
-    
-        if self.previousBlockState() == in_state:
-            start, add = 0, 0
-        else:
-            start = delimiter.indexIn(text)
-            if start in self.tripleQuoutesWithinStrings:
-                return False
-            add = delimiter.matchedLength()
-
-        while start >= 0:
-            end = delimiter.indexIn(text, start + add)
-            if end >= add:
-                length = end - start + add + delimiter.matchedLength()
-                self.setCurrentBlockState(0)
-            else:
-                self.setCurrentBlockState(in_state)
-                length = len(text) - start + add
-            self.setFormat(start, length, style)
-            start = delimiter.indexIn(text, start + length)
-            
-        return True if self.currentBlockState() == in_state else False"""
-        return self.currentBlockState() == in_state
     
                     
-class MelHighlighter(qt.QSyntaxHighlighter):
+class MelHighlighter(_MultilineStrings, qt.QSyntaxHighlighter):
     """Syntax highlighter that colorizes MEL source in the code editor."""
 
     keywords = [
@@ -3949,7 +3903,7 @@ class MelHighlighter(qt.QSyntaxHighlighter):
         return cls._commands
 
 
-    def __init__(self, parent=None, shearch_and_replace=[]) -> None:
+    def __init__(self, parent=None, shearch_and_replace:list=None) -> None:
         """Compile the MEL highlighting rules and multi-line string states.
 
         Args:
@@ -3965,7 +3919,7 @@ class MelHighlighter(qt.QSyntaxHighlighter):
         # Multi-line strings (expression, flag, style)
         self.tri_single = (qt.QtCore.QRegularExpression("'''"), 1, mel_syntax_styles('comment')) if qt.__qt__ == "pyside6" else (qt.QtCore.QRegExp("'''"), 1, mel_syntax_styles('comment'))
         self.tri_double = (qt.QtCore.QRegularExpression('"""'), 2, mel_syntax_styles('comment')) if qt.__qt__ == "pyside6" else (qt.QtCore.QRegExp('"""'), 2, mel_syntax_styles('comment'))
-        self.shearch_and_replace = shearch_and_replace
+        self.shearch_and_replace = list(shearch_and_replace or [])
         
         rules = []
 
@@ -4072,111 +4026,5 @@ class MelHighlighter(qt.QSyntaxHighlighter):
             in_multiline = self.match_multiline(text, *self.tri_double)
 
 
-    def match_multiline(self, text, delimiter, in_state, style) -> bool:
-        """Highlight a triple-quoted multi-line string spanning block states.
-
-        Args:
-            text:      (str): - text of the current document block.
-            delimiter: (object): - compiled regex matching the string delimiter.
-            in_state:  (int): - block state flagging an open multi-line string.
-            style:     (qt.QTextCharFormat): - format applied to the string.
-
-        Returns:
-            bool: True if the block ends inside a multi-line string.
-        """
-        # low bits only: colour_brackets parks the bracket nesting depth in the high ones. Harmless
-        # where no depth is stored - a state of 0..2 is unchanged by the modulo.
-        if self.previousBlockState() % _STATE_SHIFT == in_state:
-            start, add = 0, 0
-        else:
-            if qt.__qt__ == "pyside6":
-                match = delimiter.match(text)
-                start = match.capturedStart()
-                add = match.capturedLength() if match.hasMatch() else -1
-            else:
-                start = delimiter.indexIn(text)
-                add = delimiter.matchedLength()
-
-            if start in self.tripleQuoutesWithinStrings:
-                return False
-
-        while start >= 0:
-            if qt.__qt__ == "pyside6":
-                end_match = delimiter.match(text, start + add)
-                end = end_match.capturedStart() if end_match.hasMatch() else -1
-                end_length = end_match.capturedLength()
-            else:
-                end = delimiter.indexIn(text, start + add)
-                end_length = delimiter.matchedLength()
-
-            if end >= add:
-                length = end - start + add + end_length
-                self.setCurrentBlockState(0)
-            else:
-                self.setCurrentBlockState(in_state)
-                length = len(text) - start + add
-            self.setFormat(start, length, style)
-
-            if qt.__qt__ == "pyside6":
-                start_match = delimiter.match(text, start + length)
-                start = start_match.capturedStart() if start_match.hasMatch() else -1
-            else:
-                start = delimiter.indexIn(text, start + length)
-
-        return self.currentBlockState() == in_state
     
     
-    """
-    def highlightBlock(self, text):
-        self.tripleQuoutesWithinStrings = []
-        for expression, nth, format in self.rules:
-            index = expression.indexIn(text, 0)
-            if index >= 0:
-                if expression.pattern() in [r'"[^"\\]*(\\.[^"\\]*)*"', r"'[^'\\]*(\\.[^'\\]*)*'"]:
-                    innerIndex = self.tri_single[0].indexIn(text, index + 1)
-                    if innerIndex == -1:
-                        innerIndex = self.tri_double[0].indexIn(text, index + 1)
-
-                    if innerIndex != -1:
-                        tripleQuoteIndexes = range(innerIndex, innerIndex + 3)
-                        self.tripleQuoutesWithinStrings.extend(tripleQuoteIndexes)
-
-            while index >= 0:
-                if index in self.tripleQuoutesWithinStrings:
-                    index += 1
-                    expression.indexIn(text, index)
-                    continue
-                    
-                index = expression.pos(nth)
-                length = len(expression.cap(nth))
-                self.setFormat(index, length, format)
-                index = expression.indexIn(text, index + length)
-
-        self.setCurrentBlockState(0)
-
-        in_multiline = self.match_multiline(text, *self.tri_single)
-        if not in_multiline:
-            in_multiline = self.match_multiline(text, *self.tri_double)
-
-    def match_multiline(self, text, delimiter, in_state, style):
-        if self.previousBlockState() == in_state:
-            start, add = 0, 0
-        else:
-            start = delimiter.indexIn(text)
-            if start in self.tripleQuoutesWithinStrings:
-                return False
-            add = delimiter.matchedLength()
-
-        while start >= 0:
-            end = delimiter.indexIn(text, start + add)
-            if end >= add:
-                length = end - start + add + delimiter.matchedLength()
-                self.setCurrentBlockState(0)
-            else:
-                self.setCurrentBlockState(in_state)
-                length = len(text) - start + add
-            self.setFormat(start, length, style)
-            start = delimiter.indexIn(text, start + length)
-            
-        return True if self.currentBlockState() == in_state else False
-    """
