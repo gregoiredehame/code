@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.dock
 Execute: from code_editor.core import dock
 
@@ -31,7 +32,11 @@ __dockable__ = {
 
 
 def screen_size() -> list:
-    """Return the primary screen resolution as [width, height] (defaults to [1920, 1080])."""
+    """Return the primary screen resolution as [width, height] (defaults to [1920, 1080]).
+
+    Returns:
+        list: the [width, height] of the primary screen.
+    """
     try:
         app = qt.QApplication.instance() or qt.QApplication([])
         screen = app.primaryScreen().availableGeometry()
@@ -41,7 +46,14 @@ def screen_size() -> list:
 
 
 def workspace_exists(workspace:str=None) -> bool:
-    """Return True if the given workspaceControl exists in the current Maya session."""
+    """Return True if the given workspaceControl exists in the current Maya session.
+
+    Args:
+        workspace: (str): - name of the workspaceControl to test.
+
+    Returns:
+        bool: True if the workspaceControl exists.
+    """
     if not workspace:
         return False
     import maya.cmds as cmds
@@ -57,6 +69,13 @@ def delete_workspace_control(name:str=None, keep_state:bool=True) -> None:
     this used to, quietly reset the panel to floating every single time.
 
     Pass False only to deliberately forget the placement.
+
+    Args:
+        name:        (str): - name of the workspaceControl to delete.
+        keep_state: (bool): - True keeps the workspaceControlState.
+
+    Returns:
+        None.
     """
     if not name:
         return
@@ -69,9 +88,17 @@ def delete_workspace_control(name:str=None, keep_state:bool=True) -> None:
         cmds.workspaceControlState(name, remove=True)
 
 
-def delete_workspace_instances(name:str=None, delete_control:bool=True,
-                               keep_state:bool=True) -> None:
-    """Close the Qt widget and (optionally) delete the workspaceControl for the given name."""
+def delete_workspace_instances(name:str=None, delete_control:bool=True, keep_state:bool=True) -> None:
+    """Close the Qt widget and (optionally) delete the workspaceControl for the given name.
+
+    Args:
+        name:           (str): - name of the workspaceControl to close.
+        delete_control: (bool): - True also deletes the workspaceControl.
+        keep_state:     (bool): - True keeps the workspaceControlState.
+
+    Returns:
+        None.
+    """
     if not name:
         return
     import maya.OpenMayaUI as OpenMayaUI
@@ -88,7 +115,14 @@ def delete_workspace_instances(name:str=None, delete_control:bool=True,
 
 
 def restore_workspace_control(name:str=None) -> None:
-    """Restore a workspaceControl widget into the current Maya layout (uiScript restore path)."""
+    """Restore a workspaceControl widget into the current Maya layout (uiScript restore path).
+
+    Args:
+        name: (str): - name of the workspaceControl to restore.
+
+    Returns:
+        None.
+    """
     if not name:
         return
     import maya.OpenMayaUI as OpenMayaUI

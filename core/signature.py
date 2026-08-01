@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.signature
 Execute: from code_editor.core import signature
 
@@ -43,6 +44,12 @@ def doc_arguments(doc:str) -> dict:
     This is what turns the panel into documentation rather than a list of names: maya's help gives
     no per-flag prose at all, and for your own functions the description is sitting right there in
     the docstring you already wrote.
+
+    Args:
+        doc: (str): - the docstring text to read the Args: block from.
+
+    Returns:
+        dict: {name: description} for each documented argument.
     """
     if not doc:
         return {}
@@ -66,7 +73,14 @@ def doc_arguments(doc:str) -> dict:
 
 
 def _annotation(value) -> str:
-    """A parameter annotation as short readable text ('' when there is none)."""
+    """A parameter annotation as short readable text ('' when there is none).
+
+    Args:
+        value: (object): - the annotation object read from a parameter.
+
+    Returns:
+        str: the annotation as text, or '' when there is none.
+    """
     if value is inspect.Parameter.empty:
         return ""
     if isinstance(value, type):
@@ -75,7 +89,14 @@ def _annotation(value) -> str:
 
 
 def _default(parameter) -> str:
-    """The default as it would be typed, or '' when the parameter is required."""
+    """The default as it would be typed, or '' when the parameter is required.
+
+    Args:
+        parameter: (inspect.Parameter): - the parameter to read the default from.
+
+    Returns:
+        str: the default as source text, or '' when required.
+    """
     if parameter.default is inspect.Parameter.empty:
         return ""
     return repr(parameter.default)
@@ -85,6 +106,13 @@ def python_parameters(obj, described:dict=None) -> list:
     """[(name, type, default, description)] from a python callable, [] when it has no signature.
 
     A class is described by its __init__, since that is what the brackets after its name take.
+
+    Args:
+        obj:     (object): - the callable or class to inspect.
+        described: (dict): - {name: description} to attach by parameter name.
+
+    Returns:
+        list: [(name, type, default, description)] for each parameter.
     """
     target = obj
     if inspect.isclass(obj):
@@ -115,6 +143,12 @@ def command_flags(command:str) -> list:
     does not, and it is what the OUTPUT panel writes too when it is set to long names. maya's help
     carries no prose per flag, so the description stays empty - the table says so rather than
     inventing one.
+
+    Args:
+        command: (str): - the maya command name to read flags for.
+
+    Returns:
+        list: [(name, types, short, description)] for each flag.
     """
     if command in _CACHE:
         return _CACHE[command]
@@ -150,6 +184,13 @@ def return_of(obj, doc:str) -> str:
     Three, in order of trust: the python return annotation, maya's own "Return value: string[]"
     line, and finally the type at the head of a Google-style `Returns:` block - which is the shape
     used across the host.
+
+    Args:
+        obj: (object): - the callable or class the return is read from.
+        doc:    (str): - the docstring to fall back on for the return type.
+
+    Returns:
+        str: the return type as text, or '' when unknown.
     """
     if inspect.isclass(obj):
         return getattr(obj, "__name__", "")
@@ -186,6 +227,13 @@ def is_maya_command(name:str, obj) -> bool:
     Two ways in, because either can miss: the object really being a builtin that maya.cmds exposes,
     or simply the name being written through a cmds alias. Asking maya's help for a name that is not
     a command prints an error into the script editor, so this stays the gate.
+
+    Args:
+        name:   (str): - the name as written in the source, e.g. cmds.polyCube.
+        obj: (object): - the resolved object, or None.
+
+    Returns:
+        bool: True when it is a maya command.
     """
     if name.split(".")[0] in MAYA_HEADS:
         return True
@@ -207,6 +255,13 @@ def describe(name:str, obj) -> dict:
     help does not. A maya command has no signature at all, so its flags are read instead.
 
     Returns {} when there is nothing useful to say.
+
+    Args:
+        name:   (str): - the name to describe, e.g. cmds.polyCube.
+        obj: (object): - the resolved object, or None.
+
+    Returns:
+        dict: everything the panel needs, or {} when nothing useful.
     """
     if obj is None:
         return {}

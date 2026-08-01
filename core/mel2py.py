@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.mel2py
 Execute: from code_editor.core import mel2py
 
@@ -43,6 +44,12 @@ def _read_help(command:str) -> None:
 
     The same rows carry both answers, so they are read together: asking maya twice for one block of
     text would double the cost of the only slow step in the translator.
+
+    Args:
+        command: (str): - the Maya command whose help block is parsed.
+
+    Returns:
+        None: fills the module-level _ARITY and _LONG tables in place.
     """
     arity, longer = {}, {}
     try:
@@ -69,7 +76,14 @@ def _read_help(command:str) -> None:
 
 
 def flag_arity(command:str) -> dict:
-    """How many arguments each flag of `command` takes, read from Maya's own help. {} when unknown."""
+    """How many arguments each flag of `command` takes, read from Maya's own help. {} when unknown.
+
+    Args:
+        command: (str): - the Maya command to describe.
+
+    Returns:
+        dict: flag name (no dash) to argument count, {} when unknown.
+    """
     if command not in _ARITY:
         _read_help(command)
     return _ARITY[command]
@@ -80,6 +94,13 @@ def long_flag(command:str, flag:str) -> str:
 
     Falls back to the flag as written when help has nothing to say - a name we cannot expand is
     better left short than guessed at.
+
+    Args:
+        command: (str): - the Maya command that owns the flag.
+        flag:    (str): - the short flag to expand.
+
+    Returns:
+        str: the long spelling, or the flag as written when unknown.
     """
     if command not in _LONG:
         _read_help(command)
@@ -128,15 +149,37 @@ class Token(object):
 
     __slots__ = ("kind", "text", "spaced")
 
-    def __init__(self, kind, text, spaced):
+    def __init__(self, kind:str, text:str, spaced:bool) -> None:
+        """Store one token's kind, text and whether whitespace preceded it.
+
+        Args:
+            kind:   (str): - the token category from the lexer.
+            text:   (str): - the raw source text of the token.
+            spaced: (bool): - True when whitespace preceded the token.
+
+        Returns:
+            None.
+        """
         self.kind, self.text, self.spaced = kind, text, spaced
 
-    def __repr__(self):
+    def __repr__(self) -> str:
+        """Represent the token as its kind and text for debugging.
+
+        Returns:
+            str: a short "<kind text>" form.
+        """
         return "<%s %r>" % (self.kind, self.text)
 
 
 def tokenize(mel:str) -> list:
-    """Split MEL source into tokens, dropping whitespace but recording where it was."""
+    """Split MEL source into tokens, dropping whitespace but recording where it was.
+
+    Args:
+        mel: (str): - the MEL source to tokenise.
+
+    Returns:
+        list: the Token objects in source order.
+    """
     tokens, position, spaced = [], 0, False
     while position < len(mel):
         match = _TOKEN.match(mel, position)
@@ -155,7 +198,15 @@ def tokenize(mel:str) -> list:
 
 
 def _is_flag(tokens:list, index:int) -> bool:
-    """True when tokens[index] starts a command flag rather than a minus sign."""
+    """True when tokens[index] starts a command flag rather than a minus sign.
+
+    Args:
+        tokens: (list): - the token stream.
+        index:  (int): - the position to test.
+
+    Returns:
+        bool: True when a flag begins at that position.
+    """
     token = tokens[index]
     if token.kind != "op" or token.text != "-":
         return False
@@ -168,7 +219,14 @@ def _is_flag(tokens:list, index:int) -> bool:
 # ------------------------------------------------------------------------------------ expressions
 
 def _value(token:Token) -> str:
-    """One MEL literal as its Python spelling."""
+    """One MEL literal as its Python spelling.
+
+    Args:
+        token: (Token): - the token to render.
+
+    Returns:
+        str: the Python spelling of the literal.
+    """
     if token.kind == "var":
         return token.text[1:]
     if token.kind == "string":
@@ -179,7 +237,14 @@ def _value(token:Token) -> str:
 
 
 def translate_expression(tokens:list) -> str:
-    """Render an expression's tokens as Python, rewriting the operators that differ."""
+    """Render an expression's tokens as Python, rewriting the operators that differ.
+
+    Args:
+        tokens: (list): - the expression tokens.
+
+    Returns:
+        str: the Python expression text.
+    """
     out = []
     for token in tokens:
         if token.kind == "op" and token.text in _OPERATORS:
@@ -203,6 +268,13 @@ def _read_value(tokens:list, index:int) -> tuple:
 
     A parenthesised group counts as a single argument: `setAttr ($name + ".tx") 5` passes ONE
     concatenated string, and reading its tokens one by one would turn it into several.
+
+    Args:
+        tokens: (list): - the token stream.
+        index:  (int): - where the argument begins.
+
+    Returns:
+        tuple: (python text, next index).
     """
     token = tokens[index]
     if token.kind == "op" and token.text == "(":
@@ -224,7 +296,15 @@ def _read_value(tokens:list, index:int) -> tuple:
 
 
 def _starts_value(tokens:list, index:int) -> bool:
-    """True when a value (and not a flag or the end of the statement) begins at `index`."""
+    """True when a value (and not a flag or the end of the statement) begins at `index`.
+
+    Args:
+        tokens: (list): - the token stream.
+        index:  (int): - the position to test.
+
+    Returns:
+        bool: True when a value begins there.
+    """
     if index >= len(tokens) or _is_flag(tokens, index):
         return False
     token = tokens[index]
@@ -233,7 +313,15 @@ def _starts_value(tokens:list, index:int) -> bool:
 
 
 def _split_arguments(tokens:list, long_names:bool=False) -> tuple:
-    """Read a command's tokens into (positional, keyword) using the arity Maya reports."""
+    """Read a command's tokens into (positional, keyword) using the arity Maya reports.
+
+    Args:
+        tokens:     (list): - the command tokens, name first.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        tuple: (positional list, keyword list).
+    """
     command = tokens[0].text
     arity = flag_arity(command)
     # in query mode MEL flags carry no argument at all, whatever their arity says
@@ -278,7 +366,16 @@ def _split_arguments(tokens:list, long_names:bool=False) -> tuple:
 
 
 def translate_command(mel:str, module:str="cmds", long_names:bool=False) -> str:
-    """Translate a single MEL command into its `cmds` call. Returns "" for an empty statement."""
+    """Translate a single MEL command into its `cmds` call. Returns "" for an empty statement.
+
+    Args:
+        mel:        (str): - the single MEL command.
+        module:     (str): - the module name calls are attributed to.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        str: the Python call, or "" for an empty statement.
+    """
     tokens = [t for t in tokenize(mel) if t.kind != "comment"]
     while tokens and tokens[-1].kind == "op" and tokens[-1].text == ";":
         tokens.pop()
@@ -286,13 +383,31 @@ def translate_command(mel:str, module:str="cmds", long_names:bool=False) -> str:
 
 
 def _call(tokens:list, module:str, long_names:bool=False) -> str:
-    """A command invocation: name, flags, positional arguments."""
+    """A command invocation: name, flags, positional arguments.
+
+    Args:
+        tokens:     (list): - the command tokens, name first.
+        module:     (str): - the module name calls are attributed to.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        str: the Python call text.
+    """
     positional, keyword = _split_arguments(tokens, long_names)
     return "%s.%s(%s)" % (module, tokens[0].text, ", ".join(positional + keyword))
 
 
 def _statement(tokens:list, module:str, long_names:bool=False) -> str:
-    """One MEL statement (no trailing semicolon) as a line of Python, or "" when it is not one."""
+    """One MEL statement (no trailing semicolon) as a line of Python, or "" when it is not one.
+
+    Args:
+        tokens:     (list): - the statement tokens.
+        module:     (str): - the module name calls are attributed to.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        str: the Python line, or "" when it is not a statement.
+    """
     if tokens[0].kind == "name" and tokens[0].text in _UNSUPPORTED:
         return ""                                    # the caller comments it out verbatim
 
@@ -337,7 +452,16 @@ def _statement(tokens:list, module:str, long_names:bool=False) -> str:
 
 
 def _expression_or_call(tokens:list, module:str, long_names:bool=False) -> str:
-    """The right-hand side of an assignment: a backticked command, a call, or a plain expression."""
+    """The right-hand side of an assignment: a backticked command, a call, or a plain expression.
+
+    Args:
+        tokens:     (list): - the right-hand-side tokens.
+        module:     (str): - the module name calls are attributed to.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        str: the Python expression or call text.
+    """
     if not tokens:
         return "None"
     if tokens[0].kind == "op" and tokens[0].text == "`":
@@ -351,7 +475,14 @@ def _expression_or_call(tokens:list, module:str, long_names:bool=False) -> str:
 
 
 def _looks_like_call(tokens:list) -> bool:
-    """A bare `command -flag value` on the right of an assignment is still a call."""
+    """A bare `command -flag value` on the right of an assignment is still a call.
+
+    Args:
+        tokens: (list): - the tokens to inspect.
+
+    Returns:
+        bool: True when they form a command call.
+    """
     return (tokens and tokens[0].kind == "name"
             and any(_is_flag(tokens, i) for i in range(1, len(tokens))))
 
@@ -362,7 +493,14 @@ _CONTROL = re.compile(r"^\s*(if|else\s+if|else|while|for)\b")
 
 
 def _parses(python:str) -> bool:
-    """True when `python` is a syntactically valid statement."""
+    """True when `python` is a syntactically valid statement.
+
+    Args:
+        python: (str): - the Python source to check.
+
+    Returns:
+        bool: True when it parses without a SyntaxError.
+    """
     try:
         import ast
         ast.parse(python)
@@ -376,6 +514,14 @@ def translate(mel:str, module:str="cmds", long_names:bool=False) -> str:
 
     Statements that cannot be read are emitted as a commented MEL line: a translation you can see is
     incomplete beats one that looks finished and is wrong.
+
+    Args:
+        mel:        (str): - the MEL script or line.
+        module:     (str): - the module name calls are attributed to.
+        long_names: (bool): - True expands short flags to long ones.
+
+    Returns:
+        str: the translated Python source.
     """
     lines, indent = [], 0
     for raw in _statements(mel):
@@ -422,7 +568,14 @@ def translate(mel:str, module:str="cmds", long_names:bool=False) -> str:
 
 
 def _statements(mel:str) -> list:
-    """Split a script on semicolons and braces, keeping comments and blocks as their own pieces."""
+    """Split a script on semicolons and braces, keeping comments and blocks as their own pieces.
+
+    Args:
+        mel: (str): - the MEL script.
+
+    Returns:
+        list: the statement, comment and block pieces.
+    """
     pieces, current, depth, braces = [], [], 0, []
     tokens = tokenize(mel)
     for token in tokens:
@@ -470,6 +623,12 @@ def _block_brace(current:list) -> bool:
 
     `{1, 2, 3}` is a MEL array and belongs to the expression; the brace after `if (...)` opens a body.
     An array literal always follows an assignment or an opening bracket, never a condition.
+
+    Args:
+        current: (list): - the tokens gathered before the brace.
+
+    Returns:
+        bool: True when the brace opens a block.
     """
     if not current:
         return True
@@ -478,7 +637,14 @@ def _block_brace(current:list) -> bool:
 
 
 def _join(tokens:list) -> str:
-    """Re-emit tokens as MEL text, so the statement translator can re-read them in context."""
+    """Re-emit tokens as MEL text, so the statement translator can re-read them in context.
+
+    Args:
+        tokens: (list): - the tokens to re-emit.
+
+    Returns:
+        str: the reconstructed MEL text.
+    """
     out = []
     for token in tokens:
         if out and token.spaced:
@@ -488,7 +654,15 @@ def _join(tokens:list) -> str:
 
 
 def _control(head:str, module:str) -> str:
-    """Translate a control-flow header, or None when it is not one we recognise."""
+    """Translate a control-flow header, or None when it is not one we recognise.
+
+    Args:
+        head:   (str): - the header text without a trailing brace.
+        module: (str): - the module name calls are attributed to.
+
+    Returns:
+        str: the Python header, or None when not recognised.
+    """
     match = re.match(r"^(else\s+if|if|while)\s*\((.*)\)\s*$", head, re.S)
     if match:
         keyword = "elif" if match.group(1).startswith("else") else match.group(1)

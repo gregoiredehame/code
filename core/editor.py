@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Oct 27, 2023
-Modified: Jul 08, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.editor
 Execute: from code_editor.core import editor
 """
@@ -36,7 +36,11 @@ _CLOSERS = {value: key for key, value in _PAIRS.items()}
 
 
 def _line_span(text:str, start:int, end:int) -> tuple:
-    """The whole lines the range [start, end] touches, without the trailing newline."""
+    """The whole lines the range [start, end] touches, without the trailing newline.
+
+    Returns:
+        tuple: the (start, end) character offsets of those whole lines.
+    """
     left = text.rfind("\n", 0, start) + 1
     right = text.find("\n", end)
     return left, len(text) if right < 0 else right
@@ -48,6 +52,9 @@ def _bracket_span(text:str, start:int, end:int) -> tuple:
     Scans outwards from each side counting depth, so a pair nested inside the range is skipped and
     only a pair that ENCLOSES it is returned. Quotes are not considered: a bracket inside a string
     would need the tokeniser, and getting it wrong is worse than expanding one step further.
+
+    Returns:
+        tuple: the (start, end) offsets of the enclosing pair (its contents, then the brackets), or None.
     """
     start = max(0, min(start, len(text)))       # a stale caret can point past a shrunken document
     end = max(start, min(end, len(text)))
@@ -88,6 +95,9 @@ def _surface(fallback:"qt.QColor", override:str=None) -> "qt.QColor":
     The per-widget override exists so the standalone window and the editor embedded in the host
     can run different themes at the same time - a module global alone would let whichever was built
     last decide for both.
+
+    Returns:
+        'qt.QColor': the QColor to paint the surface with.
     """
     return qt.QColor(override or __surface__) if (override or __surface__) else fallback
 
@@ -146,14 +156,29 @@ class CodeLineNumber(qt.QWidget):
     # the fold arrows live in this gutter, so it owns the mouse for them. They only appear while the
     # pointer is over the gutter - drawn permanently they turn every def into a piece of furniture.
     def enterEvent(self, event) -> None:
+        """Flag the gutter as hovered so the fold arrows appear, then chain to the base handler.
+
+        Returns:
+            None.
+        """
         self.code_editor.set_gutter_hover(True)
         return super().enterEvent(event)
 
     def leaveEvent(self, event) -> None:
+        """Clear the gutter-hover flag so the fold arrows hide, then chain to the base handler.
+
+        Returns:
+            None.
+        """
         self.code_editor.set_gutter_hover(False)
         return super().leaveEvent(event)
 
     def mousePressEvent(self, event) -> None:
+        """Forward a gutter click to the editor's fold/change handler, then chain to the base handler.
+
+        Returns:
+            None.
+        """
         self.code_editor.gutter_clicked(event.pos())
         return super().mousePressEvent(event)
 
@@ -166,6 +191,11 @@ class HunkPopup(qt.QFrame):
     """
 
     def __init__(self, editor, hunk) -> None:
+        """Build the inline diff bubble showing the hunk's HEAD lines with Revert, Copy and close buttons.
+
+        Returns:
+            None.
+        """
         super().__init__(editor)
         self.editor = editor
         self.hunk = hunk
@@ -224,7 +254,11 @@ class HunkPopup(qt.QFrame):
         """ % palette)
 
     def open_at(self, point) -> None:
-        """Show the bubble just under the first line of the hunk."""
+        """Show the bubble just under the first line of the hunk.
+
+        Returns:
+            None.
+        """
         width = max(qt.px(280), self.editor.viewport().width() - self.editor.line_numbers.width()
                     - qt.px(40))
         self.setFixedWidth(width)
@@ -235,19 +269,39 @@ class HunkPopup(qt.QFrame):
         self.setFocus()
 
     def keyPressEvent(self, event) -> None:
+        """Close the bubble on Escape, otherwise chain to the base handler.
+
+        Returns:
+            None.
+        """
         if event.key() == qt.Qt.Key_Escape:
             self.close()
             return
         return super().keyPressEvent(event)
 
     def _revert(self) -> None:
+        """Revert the hunk in the editor, then close the bubble.
+
+        Returns:
+            None.
+        """
         self.editor.revert_hunk(self.hunk)
         self.close()
 
     def _copy(self) -> None:
+        """Copy the hunk's HEAD lines to the clipboard.
+
+        Returns:
+            None.
+        """
         qt.QApplication.clipboard().setText("\n".join(self.hunk[3]))
 
     def closeEvent(self, event) -> None:
+        """Clear the editor's popup reference, return focus to it, then chain to the base handler.
+
+        Returns:
+            None.
+        """
         self.editor._hunk_popup = None
         self.editor.setFocus()
         return super().closeEvent(event)
@@ -265,7 +319,11 @@ class CodeMiniMap(qt.QWidget):
     CHAR_W = 1         # design-space width of one rendered character
 
     def __init__(self, code_editor) -> None:
-        """Build the minimap parented to `code_editor`."""
+        """Build the minimap parented to `code_editor`.
+
+        Returns:
+            None.
+        """
         super().__init__(code_editor)
         self.code_editor = code_editor
         self._dragging = False
@@ -274,16 +332,35 @@ class CodeMiniMap(qt.QWidget):
     # ---- metrics
 
     def strip_width(self) -> int:
+        """The minimap strip's DPI-scaled pixel width.
+
+        Returns:
+            int: the strip width in pixels.
+        """
         return max(1, int(util.scale_dpi(self.WIDTH)))
 
     def _line_height(self) -> int:
+        """The DPI-scaled pixel height of one rendered minimap line.
+
+        Returns:
+            int: one line's height in pixels.
+        """
         return max(1, int(util.scale_dpi(self.LINE_H)))
 
     def _char_width(self) -> int:
+        """The DPI-scaled pixel width of one rendered minimap character.
+
+        Returns:
+            int: one character's width in pixels.
+        """
         return max(1, int(util.scale_dpi(self.CHAR_W)))
 
     def _first_line(self, total:int, visible:int) -> int:
-        """Top-most document line shown in the strip, tracking the editor's scroll position."""
+        """Top-most document line shown in the strip, tracking the editor's scroll position.
+
+        Returns:
+            int: the 0-based number of the top-most visible line.
+        """
         if total <= visible:
             return 0
         bar = self.code_editor.verticalScrollBar()
@@ -294,7 +371,11 @@ class CodeMiniMap(qt.QWidget):
     # ---- painting
 
     def paintEvent(self, event) -> None:
-        """Render the miniature document and the viewport indicator."""
+        """Render the miniature document and the viewport indicator.
+
+        Returns:
+            None.
+        """
         painter = qt.QPainter(self)
         painter.fillRect(self.rect(),
                          _surface(qt.QColor(43, 43, 43) if __light__ else qt.QColor(30, 30, 30),
@@ -355,7 +436,11 @@ class CodeMiniMap(qt.QWidget):
     # ---- interaction
 
     def _scroll_to(self, y_pos:int) -> None:
-        """Scroll the editor so the line under `y_pos` in the strip becomes the top visible line."""
+        """Scroll the editor so the line under `y_pos` in the strip becomes the top visible line.
+
+        Returns:
+            None.
+        """
         document = self.code_editor.document()
         total    = document.blockCount()
         line_h   = self._line_height()
@@ -368,18 +453,37 @@ class CodeMiniMap(qt.QWidget):
                      int((bar.maximum() - bar.minimum()) * min(1.0, max(0.0, float(target) / span))))
 
     def mousePressEvent(self, event) -> None:
+        """Start dragging and scroll the editor to the line clicked in the strip.
+
+        Returns:
+            None.
+        """
         self._dragging = True
         self._scroll_to(int(event.position().y()) if hasattr(event, "position") else event.y())
 
     def mouseMoveEvent(self, event) -> None:
+        """While dragging, scroll the editor to the line under the pointer in the strip.
+
+        Returns:
+            None.
+        """
         if self._dragging:
             self._scroll_to(int(event.position().y()) if hasattr(event, "position") else event.y())
 
     def mouseReleaseEvent(self, event) -> None:
+        """End the minimap drag.
+
+        Returns:
+            None.
+        """
         self._dragging = False
 
     def wheelEvent(self, event) -> None:
-        """Forward wheel scrolling to the editor so the strip behaves like part of it."""
+        """Forward wheel scrolling to the editor so the strip behaves like part of it.
+
+        Returns:
+            None.
+        """
         self.code_editor.wheelEvent(event)
 
 
@@ -393,8 +497,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
     savingScriptAs = qt.signal(object)      # context menu "Save As...", handled by the host
     changesReverted = qt.signal(object)     # a hunk was put back: only the host can re-ask git
 
-    def __init__(self, file_temp=None, file_path=None, namespace=None, minimap=False,
-                 surface=None, palette=None) -> None:
+    def __init__(self, file_temp:str=None, file_path:str=None, namespace:dict=None, minimap:bool=False, surface:str=None, palette:dict=None) -> None:
         """Initialize the code editor, loading file content and highlighter.
 
         Args:
@@ -674,6 +777,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         The PREVIOUS map is kept when the buffer does not parse. Half-typed code is unparseable most
         of the time you are editing it, and a band that blanked out on every other keystroke would be
         worse than one showing a slightly stale name.
+
+        Returns:
+            None.
         """
         if not self.sticky_scroll or (getattr(self, "file_path", "") or "").endswith(".mel"):
             self._sticky_map = []
@@ -707,6 +813,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         The headers are blocks, so they follow the edit on their own; what can change is where each
         region ENDS - typing a line into a function makes its body longer. Re-applying is cheap and
         only happens when the result would actually differ.
+
+        Returns:
+            None.
         """
         if not self._fold_headers:
             return
@@ -723,6 +832,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         A definition whose own header is at or below the top line is left out: it is on screen where
         it belongs, and repeating it in the band would show the same line twice.
+
+        Returns:
+            list: the enclosing definition entries, outermost first.
         """
         if not self.sticky_scroll or not self._sticky_map:
             return []
@@ -734,14 +846,22 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return chain[-self.STICKY_MAX:]              # innermost ones win when nesting runs deep
 
     def _sticky_height(self) -> int:
-        """Pixel height of the band, 0 when there is nothing to pin."""
+        """Pixel height of the band, 0 when there is nothing to pin.
+
+        Returns:
+            int: the band's height in pixels.
+        """
         chain = self._sticky_chain()
         if not chain:
             return 0
         return len(chain) * self.fontMetrics().height()
 
     def _repaint_sticky(self) -> None:
-        """Refresh just the top strip - scrolling must not repaint the whole viewport for this."""
+        """Refresh just the top strip - scrolling must not repaint the whole viewport for this.
+
+        Returns:
+            None.
+        """
         if not self.sticky_scroll:
             return
         height = max(self._sticky_height(), getattr(self, "_sticky_last_height", 0))
@@ -757,6 +877,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         line is coloured exactly like the real one - keywords, the name, the argument types, the
         bracket-pair tints, all of it. Painting the text ourselves only ever approximated that, and
         the approximation showed.
+
+        Returns:
+            None.
         """
         chain = self._sticky_chain()
         if not chain:
@@ -797,7 +920,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         painter.end()
 
     def _sticky_hit(self, point) -> int:
-        """The line a click in the band points at, or -1 when the click is not in the band."""
+        """The line a click in the band points at, or -1 when the click is not in the band.
+
+        Returns:
+            int: the 0-based line clicked in the band, or -1.
+        """
         chain = self._sticky_chain()
         if not chain or point.y() >= len(chain) * self.fontMetrics().height():
             return -1
@@ -811,6 +938,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         wrap is off, so its value IS the first visible block number, and the definition you clicked
         lands where you clicked it instead of jumping to the middle of the screen. A jump you did not
         aim with the mouse - Go to Definition - reads better centred, as it does in VS Code.
+
+        Returns:
+            None.
         """
         self.ensure_visible(line)                # never land the caret on a folded-away block
         block = self.document().findBlockByNumber(max(0, line))
@@ -835,17 +965,28 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Built from the same scope map the sticky band and Go to Definition use, so a region always
         ends exactly where its body does - guessing the end from indentation would swallow the blank
         lines and comments that follow a function.
+
+        Returns:
+            dict: {first_line: last_line} for each foldable class/def region.
         """
         return {entry[0]: entry[1] for entry in self._sticky_map if entry[1] > entry[0]}
 
     def set_gutter_hover(self, state:bool) -> None:
-        """Show or hide the fold arrows, which only appear under the pointer."""
+        """Show or hide the fold arrows, which only appear under the pointer.
+
+        Returns:
+            None.
+        """
         if getattr(self, "_gutter_hover", False) != bool(state):
             self._gutter_hover = bool(state)
             self.line_numbers.update()
 
     def line_at(self, y:int) -> int:
-        """The line number at gutter coordinate `y`, or -1. Folded blocks measure 0 and are skipped."""
+        """The line number at gutter coordinate `y`, or -1. Folded blocks measure 0 and are skipped.
+
+        Returns:
+            int: the line number at that y, or -1.
+        """
         block = self.firstVisibleBlock()
         top = self.blockBoundingGeometry(block).translated(self.contentOffset()).top()
         while block.isValid() and top <= y:
@@ -859,7 +1000,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
     CHANGE_STRIP = 8           # design-space width of the git bar at the very left of the gutter
 
     def gutter_clicked(self, point) -> None:
-        """Three strips: the change bar on the left, the numbers (inert), the fold arrows on the right."""
+        """Three strips: the change bar on the left, the numbers (inert), the fold arrows on the right.
+
+        Returns:
+            None.
+        """
         line = self.line_at(point.y())
         if line < 0:
             return
@@ -875,6 +1020,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         rather than incrementally is what makes nesting come out right: a region inside another one
         must stay collapsed when the outer one opens, and tracking that by hand needs the same pass
         anyway.
+
+        Returns:
+            None.
         """
         document = self.document()
         regions = self.fold_regions()
@@ -908,7 +1056,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.line_numbers.update()
 
     def fold(self, first:int) -> None:
-        """Collapse the region whose header is on line `first`."""
+        """Collapse the region whose header is on line `first`.
+
+        Returns:
+            None.
+        """
         if first in self._folded or first not in self.fold_regions():
             return
         block = self.document().findBlockByNumber(first)
@@ -919,17 +1071,29 @@ class CodeTextEdit(qt.QPlainTextEdit):
             self._apply_folds()
 
     def unfold(self, first:int) -> None:
-        """Expand the region whose header is on line `first`."""
+        """Expand the region whose header is on line `first`.
+
+        Returns:
+            None.
+        """
         self._fold_headers = [b for b in self._fold_headers
                               if not (b.isValid() and b.blockNumber() == first)]
         self._apply_folds()
 
     def toggle_fold(self, line:int) -> None:
-        """Fold the region at `line`, or unfold it if it already is."""
+        """Fold the region at `line`, or unfold it if it already is.
+
+        Returns:
+            None.
+        """
         self.unfold(line) if line in self._folded else self.fold(line)
 
     def fold_at_cursor(self, close:bool=True) -> None:
-        """Fold (or unfold) the innermost region around the caret."""
+        """Fold (or unfold) the innermost region around the caret.
+
+        Returns:
+            None.
+        """
         line = self.textCursor().blockNumber()
         holding = [first for first, last in self.fold_regions().items() if first <= line <= last]
         if not holding:
@@ -938,18 +1102,30 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.fold(first) if close else self.unfold(first)
 
     def fold_all(self) -> None:
-        """Collapse every region."""
+        """Collapse every region.
+
+        Returns:
+            None.
+        """
         document = self.document()
         self._fold_headers = [document.findBlockByNumber(first) for first in self.fold_regions()]
         self._apply_folds()
 
     def unfold_all(self) -> None:
-        """Expand everything."""
+        """Expand everything.
+
+        Returns:
+            None.
+        """
         self._fold_headers = []
         self._apply_folds()
 
     def ensure_visible(self, line:int) -> None:
-        """Open whatever is hiding `line`, so a jump never lands on an invisible block."""
+        """Open whatever is hiding `line`, so a jump never lands on an invisible block.
+
+        Returns:
+            None.
+        """
         hiding = [first for first, last in self._folded.items() if first < line <= last]
         if hiding:
             self._fold_headers = [b for b in self._fold_headers
@@ -957,7 +1133,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
             self._apply_folds()
 
     def _paint_fold_arrow(self, painter, x:int, y:int, size:int, folded:bool) -> None:
-        """A chevron: pointing down when the region is open, right when it is collapsed."""
+        """A chevron: pointing down when the region is open, right when it is collapsed.
+
+        Returns:
+            None.
+        """
         painter.save()
         pen = qt.QPen(qt.QColor(140, 140, 140), max(1, qt.px(1)))
         pen.setCapStyle(qt.Qt.RoundCap)
@@ -979,7 +1159,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
     # ------------------------------------------------------------------ multiple cursors
     def clear_extra_cursors(self) -> None:
-        """Drop back to a single caret."""
+        """Drop back to a single caret.
+
+        Returns:
+            None.
+        """
         if self.extra_cursors:
             self.extra_cursors = []
             self.line_number_highlight()
@@ -991,12 +1175,19 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Back to front so an edit never moves a caret that has not been served yet. QTextCursor does
         keep itself in step with the document on its own, but relying on that AND on ordering would
         make a bug here twice as hard to see.
+
+        Returns:
+            list: every caret, primary included, furthest down the document first.
         """
         return sorted([self.textCursor()] + list(self.extra_cursors),
                       key=lambda c: c.position(), reverse=True)
 
     def add_cursor(self, cursor) -> None:
-        """Add a caret, or remove the one already sitting there (Alt+click toggles)."""
+        """Add a caret, or remove the one already sitting there (Alt+click toggles).
+
+        Returns:
+            None.
+        """
         for existing in list(self.extra_cursors):
             if existing.position() == cursor.position():
                 self.extra_cursors.remove(existing)
@@ -1008,7 +1199,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.viewport().update()
 
     def add_cursor_vertically(self, step:int) -> None:
-        """Ctrl+Alt+Up / Down: a caret on the line above or below the lowest (or highest) one."""
+        """Ctrl+Alt+Up / Down: a caret on the line above or below the lowest (or highest) one.
+
+        Returns:
+            None.
+        """
         edge = max(self._all_cursors(), key=lambda c: c.blockNumber()) if step > 0 else \
             min(self._all_cursors(), key=lambda c: c.blockNumber())
         column = edge.positionInBlock()
@@ -1022,7 +1217,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.add_cursor(cursor)
 
     def select_next_occurrence(self, everything:bool=False) -> None:
-        """Ctrl+D: select the word, then add a caret on each following match. Ctrl+Shift+L: all."""
+        """Ctrl+D: select the word, then add a caret on each following match. Ctrl+Shift+L: all.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         if not cursor.hasSelection() and not self.extra_cursors:
             cursor.select(qt.QTextCursor.WordUnderCursor)
@@ -1062,7 +1261,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.viewport().update()
 
     def _multi_selections(self) -> list:
-        """The highlight behind each extra caret's selection."""
+        """The highlight behind each extra caret's selection.
+
+        Returns:
+            list: an extra selection for each extra caret that has a selection.
+        """
         palette = self.palette_theme or qt.theme()
         tint = qt.QColor(palette["textsel"])
         out = []
@@ -1075,7 +1278,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return out
 
     def _paint_extra_carets(self) -> None:
-        """Draw the extra carets: Qt only ever renders the one real cursor."""
+        """Draw the extra carets: Qt only ever renders the one real cursor.
+
+        Returns:
+            None.
+        """
         if not self.extra_cursors:
             return
         painter = qt.QPainter(self.viewport())
@@ -1088,7 +1295,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         painter.end()
 
     def _multi_key(self, event) -> bool:
-        """Apply `event` to every caret. False means "not mine", and the normal path takes over."""
+        """Apply `event` to every caret. False means "not mine", and the normal path takes over.
+
+        Returns:
+            bool: True if the event was applied to the carets, False to fall through.
+        """
         key = event.key()
         modifiers = event.modifiers()
         if key == qt.Qt.Key_Escape:
@@ -1146,19 +1357,30 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         `deleted` marks the line the removed text used to sit above, so `last` equals `first` there -
         there is no line left to bar, only a place to point at.
+
+        Returns:
+            None.
         """
         self._changes = list(hunks or [])
         self.line_numbers.update()
 
-    def hunk_at(self, line:int):
-        """The change covering `line`, or None."""
+    def hunk_at(self, line:int) -> tuple:
+        """The change covering `line`, or None.
+
+        Returns:
+            tuple: the hunk covering that line, or None.
+        """
         for hunk in self._changes:
             if hunk[0] <= line <= hunk[1]:
                 return hunk
         return None
 
     def revert_hunk(self, hunk) -> None:
-        """Put HEAD's version of this hunk back, in one undo step."""
+        """Put HEAD's version of this hunk back, in one undo step.
+
+        Returns:
+            None.
+        """
         first, last, kind, old_lines = hunk[0], hunk[1], hunk[2], list(hunk[3])
         document = self.document()
         cursor = self.textCursor()
@@ -1182,7 +1404,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.changesReverted.emit(self)     # only the host can ask git for the new hunk list
 
     def show_hunk(self, line:int) -> None:
-        """Open the peek bubble on the change at `line`: what HEAD had, and a way to put it back."""
+        """Open the peek bubble on the change at `line`: what HEAD had, and a way to put it back.
+
+        Returns:
+            None.
+        """
         hunk = self.hunk_at(line)
         if hunk is None:
             return
@@ -1194,7 +1420,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._hunk_popup.open_at(qt.QPoint(self.line_numbers.width(), int(top)))
 
     def step_change(self, step:int) -> bool:
-        """Move the caret to the next (or previous) changed hunk. False when there are none."""
+        """Move the caret to the next (or previous) changed hunk. False when there are none.
+
+        Returns:
+            bool: True if the caret moved, False when there are no hunks.
+        """
         if not self._changes:
             return False
         line = self.textCursor().blockNumber()
@@ -1207,7 +1437,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return True
 
     def _paint_change_bar(self, painter, y:int, height:int, kind:str) -> None:
-        """The coloured bar git puts down the left edge of a changed line."""
+        """The coloured bar git puts down the left edge of a changed line.
+
+        Returns:
+            None.
+        """
         colour = qt.QColor(self.CHANGE_COLOURS.get(kind, self.CHANGE_COLOURS["modified"]))
         width = max(2, qt.px(3))
         if kind == "deleted":
@@ -1230,6 +1464,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Scanned per line, so a triple-quoted block spanning lines reads as code. That is a knowing
         trade: the alternative is parsing the whole file on every keystroke, and this only has to be
         right about the line you are currently typing a call on.
+
+        Returns:
+            list: one bool per character of `line`, True for real code.
         """
         mask, quote = [], None
         for char in line:
@@ -1248,11 +1485,14 @@ class CodeTextEdit(qt.QPlainTextEdit):
         mask.extend([True] * (len(line) - len(mask)))
         return mask
 
-    def call_context(self):
+    def call_context(self) -> tuple:
         """(callable_name, argument_index) for the call the caret sits inside, or None.
 
         Found by walking back over CODE characters only, so a bracket inside a string or a comment
         never opens a call that is not there.
+
+        Returns:
+            tuple: (callable_name, argument_index) for the enclosing call, or None.
         """
         cursor = self.textCursor()
         current = cursor.blockNumber()
@@ -1311,6 +1551,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         What comes before the caret decides: straight after the opening bracket nothing is added,
         after another argument a ", " is, and after a comma just the space. Getting that wrong is
         what makes an "insert" button more work than typing it.
+
+        Returns:
+            None.
         """
         if not name:
             return
@@ -1327,13 +1570,16 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.setTextCursor(cursor)
         self.setFocus()
 
-    def resolve(self, name:str):
+    def resolve(self, name:str) -> object:
         """The live object `name` refers to, or None. A lookup - nothing is ever called.
 
         The editor's execution namespace is only half the answer. A standalone window runs an
         ISOLATED namespace, so `cmds` is not in it until you have run the import yourself - and
         asking for help on `cmds.circle` before importing anything is exactly when you want it. So a
         failed lookup falls back to importing the head of the name, aliases included.
+
+        Returns:
+            object: the live object `name` refers to, or None.
         """
         namespace = dict(vars(builtins))
         try:
@@ -1355,8 +1601,12 @@ class CodeTextEdit(qt.QPlainTextEdit):
             return None
 
     # ------------------------------------------------------------------ line transforms
-    def _selected_lines(self):
-        """(first, last) whole lines covered by the selection, or the caret's line on its own."""
+    def _selected_lines(self) -> tuple:
+        """(first, last) whole lines covered by the selection, or the caret's line on its own.
+
+        Returns:
+            tuple: the (first, last) line numbers covered.
+        """
         cursor = self.textCursor()
         if not cursor.hasSelection():
             return cursor.blockNumber(), cursor.blockNumber()
@@ -1371,7 +1621,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return first, last
 
     def _replace_lines(self, first:int, last:int, lines:list) -> None:
-        """Swap lines `first`..`last` for `lines`, in one undo step, and keep them selected."""
+        """Swap lines `first`..`last` for `lines`, in one undo step, and keep them selected.
+
+        Returns:
+            None.
+        """
         document = self.document()
         start = document.findBlockByNumber(first)
         end = document.findBlockByNumber(min(last, document.blockCount() - 1))
@@ -1390,18 +1644,31 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.setTextCursor(cursor)
 
     def _lines(self, first:int, last:int) -> list:
+        """The text of lines `first`..`last` inclusive.
+
+        Returns:
+            list: the text of each line in the range.
+        """
         document = self.document()
         return [document.findBlockByNumber(n).text() for n in range(first, last + 1)]
 
     def sort_lines(self, descending:bool=False) -> None:
-        """Sort the selected lines. Their indentation is part of the text, so blocks keep together."""
+        """Sort the selected lines. Their indentation is part of the text, so blocks keep together.
+
+        Returns:
+            None.
+        """
         first, last = self._selected_lines()
         if last > first:
             self._replace_lines(first, last,
                                 sorted(self._lines(first, last), key=str.lower, reverse=descending))
 
     def join_lines(self) -> None:
-        """Pull the selected lines onto one, single-spaced - the reverse of wrapping by hand."""
+        """Pull the selected lines onto one, single-spaced - the reverse of wrapping by hand.
+
+        Returns:
+            None.
+        """
         first, last = self._selected_lines()
         if last == first:
             last = min(first + 1, self.document().blockCount() - 1)   # no selection: take the next
@@ -1411,7 +1678,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._replace_lines(first, last, [" ".join(p for p in parts if p)])
 
     def transform_case(self, mode:str) -> None:
-        """upper / lower / title on the selection, or on the word under the caret."""
+        """upper / lower / title on the selection, or on the word under the caret.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         if not cursor.hasSelection():
             cursor.select(qt.QTextCursor.WordUnderCursor)
@@ -1430,6 +1701,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         Worth having on save: a stray space at the end of a line is invisible in the editor and
         shows up in git as a changed line, which buries the change you meant to make.
+
+        Returns:
+            bool: True if any trailing whitespace was removed.
         """
         text = self.toPlainText()
         cleaned = "\n".join(line.rstrip() for line in text.split("\n"))
@@ -1450,7 +1724,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
     # ------------------------------------------------------------------ symbols
     def symbol_under_cursor(self) -> str:
-        """The identifier the caret is in, or an empty string when it is not on one."""
+        """The identifier the caret is in, or an empty string when it is not on one.
+
+        Returns:
+            str: the identifier under the caret, or an empty string.
+        """
         cursor = self.textCursor()
         cursor.select(qt.QTextCursor.WordUnderCursor)
         word = cursor.selectedText()
@@ -1462,6 +1740,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Same-named definitions are common - every class has an __init__ - so the innermost scope
         around the caret wins: called from inside class A, `self.build()` finds A's build and not the
         one in some other class further down the file.
+
+        Returns:
+            int: the line defining `name`, or -1.
         """
         matches = [entry for entry in self._sticky_map if entry[4] == name]
         if not matches:
@@ -1482,6 +1763,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         This resolves within the CURRENT FILE only. Following imports across the workspace needs a
         real resolver, and guessing "the first def with that name anywhere" would send you to the
         wrong file often enough to be worse than saying so.
+
+        Returns:
+            str: an empty string on success, otherwise the reason it could not jump.
         """
         name = self.symbol_under_cursor()
         if not name:
@@ -1496,7 +1780,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return ""
 
     def _offset(self, line:int, column:int) -> int:
-        """Absolute document position of a 1-based line / 0-based column, as tokenize reports them."""
+        """Absolute document position of a 1-based line / 0-based column, as tokenize reports them.
+
+        Returns:
+            int: the absolute document position.
+        """
         return self.document().findBlockByNumber(line - 1).position() + column
 
     def identifier_spots(self, name:str) -> list:
@@ -1506,6 +1794,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         string or a comment is never touched, and `self.foo` yields the `foo` alone. It refuses to
         run on code that does not tokenise, which is the honest answer - a half-typed file cannot be
         renamed safely.
+
+        Returns:
+            list: the (start, end) offsets of each identifier occurrence.
         """
         text = self.toPlainText()
         spots = []
@@ -1523,6 +1814,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Returns "" on success, otherwise the reason. Like Go to Definition this stops at the file
         boundary; a rename that reached across the workspace without resolving imports would quietly
         break the callers it missed.
+
+        Returns:
+            str: an empty string on success, otherwise the reason it could not rename.
         """
         old = self.symbol_under_cursor()
         if not old:
@@ -1572,6 +1866,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         Both properties live in one place because a widget's own sheet REPLACES the previous one -
         writing the size alone would drop the background, and the reverse would drop the size.
+
+        Returns:
+            None.
         """
         base = self.surface or __surface__ or ("#2b2b2b" if __light__ else "#1e1e1e")
         points = self.font().pointSize()
@@ -1678,7 +1975,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event) -> None:
-        """Drag out a column with Alt held; otherwise just keep the pointer shape honest."""
+        """Drag out a column with Alt held; otherwise just keep the pointer shape honest.
+
+        Returns:
+            None.
+        """
         if self._column_from is not None and (event.buttons() & qt.Qt.LeftButton):
             if (event.pos() - self._column_from).manhattanLength() > qt.px(3):
                 self._column_moved = True
@@ -1689,7 +1990,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
-        """Settle what the Alt press meant: a caret if it never moved, a column if it did."""
+        """Settle what the Alt press meant: a caret if it never moved, a column if it did.
+
+        Returns:
+            None.
+        """
         if self._column_from is not None:
             if not self._column_moved:
                 self.add_cursor(self.cursorForPosition(self._column_from))
@@ -1702,6 +2007,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         The rectangle is built from COLUMNS, not from x pixels, so a line shorter than the right
         edge simply ends where it ends instead of the caret floating past its last character.
+
+        Returns:
+            None.
         """
         start = self.cursorForPosition(start_point)
         end = self.cursorForPosition(end_point)
@@ -2010,6 +2318,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Whole words only, so `pos` does not light up inside `position`. It stays quiet when there is
         nothing useful to show - a selection of your own, a one-letter name, or a hit on every line of
         a big file, where the highlight would be noise rather than information.
+
+        Returns:
+            list: an extra selection for each other occurrence of the word.
         """
         cursor = self.textCursor()
         if cursor.hasSelection() or self.isReadOnly():
@@ -2040,6 +2351,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
     def _run_lint(self) -> None:
         """Compile the buffer (Python files only) and remember which line has a syntax error, then refresh
         the highlight. compile() never runs the code — it only parses it.
+
+        Returns:
+            None.
         """
         line = None
         if not (getattr(self, "file_path", "") or "").endswith(".mel"):
@@ -2056,7 +2370,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
             self.line_number_highlight()
 
     def _lint_selections(self) -> list:
-        """A red wavy-ish underline on the line flagged by the live syntax check (if any)."""
+        """A red wavy-ish underline on the line flagged by the live syntax check (if any).
+
+        Returns:
+            list: the underline selection for the flagged line, or empty when there is none.
+        """
         lint_line = getattr(self, "_lint_line", None)
         if not lint_line:
             return []
@@ -2075,6 +2393,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
     def _bracket_selections(self) -> list:
         """Return extra selections highlighting the bracket next to the caret and its match (or a red
         highlight when unmatched). Handles () [] {} in both directions.
+
+        Returns:
+            list: the extra selections for the bracket and its match, or a single red one when unmatched.
         """
         if self.isReadOnly():
             return []
@@ -2109,7 +2430,12 @@ class CodeTextEdit(qt.QPlainTextEdit):
                     break
             i += direction
 
-        def _sel(index, ok):
+        def _sel(index:int, ok:bool) -> object:
+            """Build an extra selection boxing the bracket at `index`, green when matched, red when not.
+
+            Returns:
+                object: the bracket's extra selection.
+            """
             s = qt.QTextEdit.ExtraSelection()
             color = qt.QColor(90, 130, 90) if ok else qt.QColor(150, 60, 60)
             s.format.setBackground(color)
@@ -2217,6 +2543,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
         Args:
             size:    (int):  - point size to apply (clamped to 6..48).
             persist: (bool): - store it in a Maya optionVar so it is restored next time.
+
+        Returns:
+            None.
         """
         try:
             size = max(6, min(48, int(size)))
@@ -2445,6 +2774,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
     def _show_call_tip(self) -> None:
         """When '(' is typed, show the callable's signature (and first doc line) as a tooltip. Resolves the
         callable from the live console namespace, so it works for your functions, cmds.*, etc.
+
+        Returns:
+            None.
         """
         cursor = self.textCursor()
         line = cursor.block().text()[:cursor.positionInBlock()]
@@ -2479,6 +2811,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
     def _handle_auto_pairs(self, event) -> bool:
         """Auto-close brackets/quotes, wrap a selection, skip over a matching closer, and pair-delete on
         backspace. Returns True when it handled the key (so the default insert is skipped).
+
+        Returns:
+            bool: True if the key was handled and the default insert should be skipped.
         """
         text = event.text()
         cursor = self.textCursor()
@@ -2535,12 +2870,19 @@ class CodeTextEdit(qt.QPlainTextEdit):
         return True
 
     def _comment_token(self) -> str:
-        """'//' for a .mel file, '#' otherwise."""
+        """'//' for a .mel file, '#' otherwise.
+
+        Returns:
+            str: the comment token for this file's language.
+        """
         return "//" if (getattr(self, "file_path", "") or "").endswith(".mel") else "#"
 
     def toggle_comment(self) -> None:
         """Comment or uncomment every line touched by the selection (or the current line). If all touched
         lines are already commented it uncomments; otherwise it comments. One undo step.
+
+        Returns:
+            None.
         """
         token = self._comment_token()
         cursor = self.textCursor()
@@ -2580,7 +2922,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         edit.endEditBlock()
 
     def go_to_line(self) -> None:
-        """Prompt for a line number and move the cursor there."""
+        """Prompt for a line number and move the cursor there.
+
+        Returns:
+            None.
+        """
         total = self.document().blockCount()
         # parented to the editor: a stylesheet travels down the parent chain, and a dialog raised
         # with no parent comes up in the host application's default grey
@@ -2599,7 +2945,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.centerCursor()
 
     def duplicate_line(self) -> None:
-        """Duplicate the current line, or the selected lines, below. One undo step."""
+        """Duplicate the current line, or the selected lines, below. One undo step.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         doc = self.document()
         if cursor.hasSelection():
@@ -2631,6 +2981,9 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         The caret follows the COPY, which is what makes repeating it stack duplicates the way you
         expect rather than pushing the original further away.
+
+        Returns:
+            None.
         """
         cursor = self.textCursor()
         document = self.document()
@@ -2653,7 +3006,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.setTextCursor(edit)
 
     def duplicate_selection(self) -> None:
-        """Repeat the selection right after itself; with no selection, duplicate the line."""
+        """Repeat the selection right after itself; with no selection, duplicate the line.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         if not cursor.hasSelection():
             return self.duplicate_line()
@@ -2666,7 +3023,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         edit.endEditBlock()
 
     def select_line(self) -> None:
-        """Select the whole current line; called again, extend the selection by one more line."""
+        """Select the whole current line; called again, extend the selection by one more line.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         document = self.document()
         first = document.findBlock(cursor.selectionStart())
@@ -2682,7 +3043,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.setTextCursor(cursor)
 
     def expand_selection(self) -> None:
-        """Grow the selection one step: word, then line, then enclosing brackets, then everything."""
+        """Grow the selection one step: word, then line, then enclosing brackets, then everything.
+
+        Returns:
+            None.
+        """
         start, end = self.textCursor().selectionStart(), self.textCursor().selectionEnd()
         stack = getattr(self, "_expand_stack", [])
         if not stack or stack[-1][1] != (start, end):
@@ -2707,7 +3072,11 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._select(span)
 
     def shrink_selection(self) -> None:
-        """Step back to what the selection was before the last expand."""
+        """Step back to what the selection was before the last expand.
+
+        Returns:
+            None.
+        """
         stack = getattr(self, "_expand_stack", [])
         cursor = self.textCursor()
         current = (cursor.selectionStart(), cursor.selectionEnd())
@@ -2720,13 +3089,22 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._expand_stack = []
 
     def _select(self, span:tuple) -> None:
+        """Set the primary caret to select the given (start, end) span.
+
+        Returns:
+            None.
+        """
         cursor = self.textCursor()
         cursor.setPosition(span[0])
         cursor.setPosition(span[1], qt.QTextCursor.KeepAnchor)
         self.setTextCursor(cursor)
 
     def move_line(self, direction:int=0) -> None:
-        """Move the current line (or selected lines) up (-1) or down (+1). One undo step, keeps selection."""
+        """Move the current line (or selected lines) up (-1) or down (+1). One undo step, keeps selection.
+
+        Returns:
+            None.
+        """
         if direction not in (-1, 1):
             return
         doc    = self.document()
@@ -2790,12 +3168,19 @@ class CodeTextEdit(qt.QPlainTextEdit):
 
         Like clicked_menu_save this only EMITS: the widget has no idea where a script belongs - the
         standalone window writes straight to disk, the host writes through its workspace.
+
+        Returns:
+            None.
         """
         self.flush_autosave()
         self.savingScriptAs.emit(True)
 
     def flush_autosave(self) -> None:
-        """Write the pending debounced autosave now (called before a save/close so nothing is lost)."""
+        """Write the pending debounced autosave now (called before a save/close so nothing is lost).
+
+        Returns:
+            None.
+        """
         timer = getattr(self, "_autosave_timer", None)
         if timer is not None and timer.isActive():
             timer.stop()
@@ -2967,6 +3352,9 @@ class CodeCompleter(qt.QCompleter):
         Both were hard-coded, which showed: the standalone window runs the vscode palette and the
         embedded panel the host one, and the popup drew the other palette's blue in both. The font ignored Ctrl+wheel
         for the same reason, so the list stayed 9pt over text the user had zoomed to 16.
+
+        Returns:
+            None.
         """
         popup = self.popup()
         if popup is None:
@@ -2998,6 +3386,9 @@ class CodeCompleter(qt.QCompleter):
 
     def _namespace(self) -> dict:
         """The namespace to introspect: the editor's own console namespace (isolated or shared), plus
+
+        Returns:
+            dict: the console namespace to introspect, plus builtins.
         builtins. Falls back to the shared the host console namespace when no editor is attached yet."""
         ns = dict(vars(builtins))
         editor = self.widget()
@@ -3008,7 +3399,11 @@ class CodeCompleter(qt.QCompleter):
         return ns
 
     def _kind(self, name:str, obj:object) -> str:
-        """Which symbol badge `name` gets in the popup - the same kinds the Outline paints."""
+        """Which symbol badge `name` gets in the popup - the same kinds the Outline paints.
+
+        Returns:
+            str: the badge name ('keyword', 'module', 'class', 'def' or 'var').
+        """
         if keyword.iskeyword(name):
             return "keyword"
         if obj is None:
@@ -3026,6 +3421,9 @@ class CodeCompleter(qt.QCompleter):
 
         Only a plain dotted identifier is resolved: `cmds.polyCube().<tab>` is left alone rather than
         evaluated, because evaluating it would CALL polyCube just to decorate a list with icons.
+
+        Returns:
+            object: the object whose attributes are being completed, or None for a bare name.
         """
         if "." not in expression:
             return None
@@ -3044,6 +3442,9 @@ class CodeCompleter(qt.QCompleter):
         before the last dot). We de-duplicate, strip the trailing '(' rlcompleter adds to callables, and
         drop dunder names for a cleaner list. The kind comes from the object itself, so a class, a
         function and a plain value are told apart in the popup exactly as they are in the Outline.
+
+        Returns:
+            list: [(name, kind)] completions for the expression.
         """
         import rlcompleter
         namespace = self._namespace()
@@ -3085,7 +3486,11 @@ class CodeCompleter(qt.QCompleter):
         return cursor.selectedText()
 
     def _call_info(self, widget, name:str) -> dict:
-        """describe() for `name`, cached: this runs on every keystroke inside a call."""
+        """describe() for `name`, cached: this runs on every keystroke inside a call.
+
+        Returns:
+            dict: the describe() info for the call.
+        """
         if name in self._info_cache:
             return self._info_cache[name]
         from . import signature
@@ -3100,6 +3505,9 @@ class CodeCompleter(qt.QCompleter):
 
         Same source as the QUICK HELP panel, so the popup and the panel never disagree about what a
         call takes. Off unless the host turns it on - it follows that panel's visibility.
+
+        Returns:
+            list: [(name, 'arg')] parameters of the enclosing call matching the prefix.
         """
         if not getattr(widget, "argument_completion", False) or not prefix:
             return []
@@ -3159,6 +3567,9 @@ class CodeCompleter(qt.QCompleter):
 
         The ORDER is the caller's: arguments of the enclosing call come before names from the
         namespace, and sorting here would shuffle the two groups together.
+
+        Returns:
+            bool: True if any completions were offered, False when there is nothing.
         """
         if not matches:
             return False
@@ -3364,7 +3775,7 @@ class SearchReplaceBar(qt.QWidget):
 
     # Internal helpers
 
-    def get_pattern(self):
+    def get_pattern(self) -> object:
         """Compile the search field text into a regex honoring case sensitivity.
 
         Returns:
@@ -3848,6 +4259,9 @@ class PythonHighlighter(_MultilineStrings, qt.QSyntaxHighlighter):
         match_multiline owns the low bits and reads them modulo STATE_SHIFT, so the two coexist.
         This runs LAST, once the rules and the multi-line pass have formatted the block, which is how
         a bracket inside a string or a comment is recognised and left alone.
+
+        Returns:
+            None.
         """
         previous = self.previousBlockState()
         depth = max(0, previous // _STATE_SHIFT) if previous > 0 else 0
@@ -3871,7 +4285,11 @@ class PythonHighlighter(_MultilineStrings, qt.QSyntaxHighlighter):
         self.setCurrentBlockState(base + depth * _STATE_SHIFT)
 
     def _is_literal(self, index:int) -> bool:
-        """True if the character at `index` was already formatted as a string or a comment."""
+        """True if the character at `index` was already formatted as a string or a comment.
+
+        Returns:
+            bool: True if the character is inside a string or a comment.
+        """
         return self.format(index).foreground().color().name() in self._literal_colours
 
     
@@ -3893,6 +4311,9 @@ class MelHighlighter(_MultilineStrings, qt.QSyntaxHighlighter):
 
         Loading it here (not at class-definition time) means importing this module never requires a live
         Maya session, and the (expensive) melInfo query runs at most once for the whole editor.
+
+        Returns:
+            list: the MEL command names.
         """
         if cls._commands is None:
             try:

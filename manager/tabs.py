@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Jul 08, 2026
+Modified: Aug 01, 2026
 Module: code_editor.manager.tabs
 Execute: from code_editor.manager import tabs
 """
@@ -22,8 +22,16 @@ import maya.cmds as cmds
 import os, datetime
 
 
-def _rel(path, root):
-    """Convert absolute path to relative from root; keep absolute if outside root or different drive."""
+def _rel(path:str=None, root:str=None) -> str:
+    """Convert absolute path to relative from root; keep absolute if outside root or different drive.
+
+    Args:
+        path: (str): - absolute path to convert.
+        root: (str): - root directory to make the path relative to.
+
+    Returns:
+        str: path relative to root, or the original path when outside root.
+    """
     if not path or not root or not os.path.isabs(path):
         return path
     try:
@@ -32,25 +40,44 @@ def _rel(path, root):
     except ValueError:
         return path
 
-def _abs(path, root):
-    """Resolve relative path against root; absolute paths pass through."""
+
+def _abs(path:str=None, root:str=None) -> str:
+    """Resolve relative path against root; absolute paths pass through.
+
+    Args:
+        path: (str): - relative or absolute path to resolve.
+        root: (str): - root directory to resolve the path against.
+
+    Returns:
+        str: absolute path resolved against root.
+    """
     if not path or os.path.isabs(path):
         return path
     return os.path.normpath(os.path.join(root, path))
 
+
 __light__ = True
+
 
 class TabWidget(qt.QTabWidget):
     """Tabbed code editor container managing temp-file-backed script tabs."""
     dataRemoved = qt.signal(object)
+
     def __init__(self, parent=None) -> None:
-        """Initialize the tab widget, its stylesheet and corner focus menu."""
+        """Initialize the tab widget, its stylesheet and corner focus menu.
+
+        Args:
+            parent: (object): - parent widget for the tab container.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.workspace = None
         self.setMovable(True)
         self.setTabsClosable(True)
         self.setVisible(False)
-        
+
         tab_h = qt.px(25)
         if __light__:
             self.setStyleSheet(f"""
@@ -92,23 +119,25 @@ class TabWidget(qt.QTabWidget):
                     color: white;
                 }}
                 """)
-            
+
         self.focus = qt.QToolButton(icon=qt.QIcon(os.path.join(__icons__, "dots.png")))
         self.setCornerWidget(self.focus, qt.Qt.TopRightCorner)
         self.focus.setContextMenuPolicy(qt.Qt.CustomContextMenu)
         self.focus.customContextMenuRequested.connect(self.focus_menu)
-        
+
         self.tabCloseRequested.connect(partial(self.tab_close_requested))
         self.currentChanged.connect(partial(self.current_changed))
         self.setTabPosition(qt.QTabWidget.North)
 
-    
     def removeTab(self, index:int=None, history:bool=True) -> None:
         """Close a tab, running its close event and optionally purging its temp file.
 
         Args:
-            index:   (int):  - index of the tab to remove.
+            index:    (int): - index of the tab to remove.
             history: (bool): - True to keep the workspace entry and temp file, False to delete them.
+
+        Returns:
+            None.
         """
         widget = self.widget(index)
         if widget:
@@ -116,7 +145,7 @@ class TabWidget(qt.QTabWidget):
             widget.closeEvent(close_event)
             if close_event.isAccepted():
                 self.dataRemoved.emit(True)
-                
+
                 if self.workspace and not history:
                     data = kcore.json.read(self.workspace)
                     file_temp_abs = self.widget(index).accessibleName()
@@ -129,19 +158,19 @@ class TabWidget(qt.QTabWidget):
 
                     if os.path.exists(file_temp_abs):
                         os.remove(file_temp_abs)
-                        
+
                 super().removeTab(index)
-                
-    
-    
+
     def tab_close_requested(self, index:int=None) -> None:
         """Handle a tab close request by removing the tab without keeping history.
 
         Args:
             index: (int): - index of the tab requested to close.
+
+        Returns:
+            None.
         """
         self.removeTab(index, False)
-
 
     def close_file(self, file_path:str=None) -> None:
         """closes the tab for the given file path, if it's currently open.
@@ -149,19 +178,29 @@ class TabWidget(qt.QTabWidget):
         doesn't keep a stale tab pointing to a now-missing file.
 
         Args:
-            file_path: (str): - file path to close from the editor"""
+            file_path: (str): - file path to close from the editor.
+
+        Returns:
+            None.
+        """
         paths = self.current_paths()
         if file_path in paths:
             self.removeTab(paths.index(file_path), False)
 
-                
-    def close_missing_file(self, file_path:str) -> None:
-        """Ask the user to close and discard, or save the current content to a new path."""
+    def close_missing_file(self, file_path:str=None) -> None:
+        """Ask the user to close and discard, or save the current content to a new path.
+
+        Args:
+            file_path: (str): - path of the missing file whose tab should be handled.
+
+        Returns:
+            None.
+        """
         paths = self.current_paths()
         if file_path not in paths:
             return
-        idx       = paths.index(file_path)
-        file_temp = self.widget(idx).accessibleName()
+        index     = paths.index(file_path)
+        file_temp = self.widget(index).accessibleName()
         file_name = os.path.basename(file_path)
 
         choice = kcore.message.warning(
@@ -197,52 +236,59 @@ class TabWidget(qt.QTabWidget):
 
         Args:
             index: (int): - index of the newly selected tab.
+
+        Returns:
+            None.
         """
         pass
 
-
-    def focus_menu(self, position) -> None:
+    def focus_menu(self, position=None) -> None:
         """Build and show a popup listing every open tab for quick navigation.
 
         Args:
             position: (object): - local position where the context menu was requested.
+
+        Returns:
+            None.
         """
         self.popup = qt.QMenu(self.focus)
-        for i in range(self.count()):
-            name = self.tabText(i)
+        for index in range(self.count()):
+            name = self.tabText(index)
             action = self.popup.addAction(name)
             if name == "Python":
                 action.setIcon(qt.QIcon(os.path.join(__icons__, "python_compiled.png")))
-                
+
             if name == "MEL":
-                action.setIcon(qt.QIcon(os.path.join(__icons__, "mel_compiled.png")))   
-                 
+                action.setIcon(qt.QIcon(os.path.join(__icons__, "mel_compiled.png")))
+
             if name.endswith(".py"):
                 action.setIcon(qt.QIcon(os.path.join(__icons__, "editor_python2.png")))
-                
+
             if name.endswith(".mel"):
                 action.setIcon(qt.QIcon(os.path.join(__icons__, "editor_mel.png")))
-                
+
             if name.endswith(".txt"):
                 action.setIcon(qt.QIcon(os.path.join(__icons__, "file.png")))
-                
+
             if name.endswith(".json"):
                 action.setIcon(qt.QIcon(os.path.join(__icons__, "json.png")))
-                
-            if i == self.currentIndex():
+
+            if index == self.currentIndex():
                 font = qt.QFont()
                 font.setBold(True)
                 action.setFont(font)
-                
-            action.triggered.connect(partial(self.set_current_tab_index, i))
-        self.popup.exec_(self.focus.mapToGlobal(position)) 
-        
-        
+
+            action.triggered.connect(partial(self.set_current_tab_index, index))
+        self.popup.exec_(self.focus.mapToGlobal(position))
+
     def set_current_tab_index(self, index:int=None) -> None:
         """Set the active tab to the given index, ignoring invalid values.
 
         Args:
             index: (int): - index of the tab to activate.
+
+        Returns:
+            None.
         """
         # Exception, not a bare except: a bare one also catches KeyboardInterrupt and SystemExit,
         # so a maya shutdown arriving here would be swallowed instead of allowed through
@@ -251,12 +297,14 @@ class TabWidget(qt.QTabWidget):
         except Exception:
             pass
 
-        
     def open_temp(self, file_temp:str=None) -> None:
         """Reopen a tab from a stored temporary file recorded in the workspace.
 
         Args:
             file_temp: (str): - temporary file key stored in the workspace json.
+
+        Returns:
+            None.
         """
         if self.workspace:
             codes = kcore.json.read(self.workspace)
@@ -272,13 +320,15 @@ class TabWidget(qt.QTabWidget):
             self.addTab(code_widget, self.icon_from_path(file_temp_abs), file_name)
             self.setVisible(True)
             self.setCurrentIndex(self.count() -1)
-            
-            
+
     def open_file(self, file_path:str=None) -> None:
         """Open a script file in a new tab, creating a backing temporary copy.
 
         Args:
             file_path: (str): - path to the script file to open.
+
+        Returns:
+            None.
         """
         if self.workspace:
             codes = kcore.json.read(self.workspace)
@@ -305,7 +355,6 @@ class TabWidget(qt.QTabWidget):
                     self.setVisible(True)
                     self.setCurrentIndex(self.count() -1)
 
-
     def goto_error(self, file_path:str=None, line:int=None) -> None:
         """Open (or focus) `file_path` and move the caret to `line` — used by the output console when a
         traceback line is double-clicked.
@@ -313,6 +362,9 @@ class TabWidget(qt.QTabWidget):
         Args:
             file_path: (str): - the script file from the traceback.
             line:      (int): - the 1-based line number to jump to.
+
+        Returns:
+            None.
         """
         if not file_path:
             return
@@ -337,17 +389,18 @@ class TabWidget(qt.QTabWidget):
             editor.centerCursor()
             editor.setFocus()
 
-
-            
     def compare_code(self, message:str=None, file_path:str=None, file_temp:str=None, shearch_and_replace_widget:bool=None) -> None:
         """function that compare given message with the current tab layout text.
-            if it's a temp file, will auto save, otherwhise will rename the editor with a *.
+        if it's a temp file, will auto save, otherwhise will rename the editor with a *.
 
         Args:
-            message:                  (str): - string to compare to a file path
-            file_path:                (str): - string path to compare with message
-            file_temp:                (str): - temporary file to check
-            shearch_and_replace_widget: (bool): - QtabWidget
+            message:                     (str): - string to compare to a file path.
+            file_path:                   (str): - string path to compare with message.
+            file_temp:                   (str): - temporary file to check.
+            shearch_and_replace_widget: (bool): - QtabWidget.
+
+        Returns:
+            None.
         """
         kcore.folder.write(file_temp, message)
         if file_path:
@@ -359,27 +412,29 @@ class TabWidget(qt.QTabWidget):
             if kcore.folder.read(file_path) != message:
                 self.setTabText(index, "*.".join(tab_name.rsplit('.')))
             else:
-                self.setTabText(index, tab_name)  
-                  
+                self.setTabText(index, tab_name)
+
         #if shearch_and_replace_widget:
         #    shearch_text(directory=None, tab_layout=tab_layout, index=None, shearch=None, widget=shearch_and_replace_widget)
-            
+
     def save_code(self, message:str=None, file_path:str=None, file_temp:str=None) -> None:
-        """function that will save temp code inside finale code
+        """function that will save temp code inside finale code.
 
         Args:
             message:   (str): - code content (unused, taken from temp file).
-            file_path: (str): - string path to compare with message
-            file_temp: (str): - temporary file to check
+            file_path: (str): - string path to compare with message.
+            file_temp: (str): - temporary file to check.
+
+        Returns:
+            None.
         """
         file_path = file_path if file_path else self.widget(self.currentIndex()).objectName()
         file_temp = file_temp if file_temp else self.widget(self.currentIndex()).accessibleName()
-        
+
         kcore.folder.write(file_path, kcore.folder.read(file_temp))
         index = self.current_paths().index(file_path)
         self.setTabText(index, self.tabText(index).replace('*',''))
 
-    
     def icon_from_path(self, file_path:str=None) -> qt.QIcon:
         """Return an editor icon matching the given file's extension.
 
@@ -392,14 +447,14 @@ class TabWidget(qt.QTabWidget):
         if os.path.exists(file_path):
             if file_path.endswith(".py"):
                 return qt.QIcon(os.path.join(__icons__, "editor_python2.png"))
-                
+
             elif file_path.endswith(".mel"):
                 return qt.QIcon(os.path.join(__icons__, "editor_mel.png"))
-                
+
             else:
-                return qt.QIcon(os.path.join(__icons__, "file_blue.png"))  
+                return qt.QIcon(os.path.join(__icons__, "file_blue.png"))
         return qt.QIcon()
-        
+
     def current_paths(self) -> list:
         """Return the file paths (or temp names) backing every open tab.
 
@@ -410,9 +465,9 @@ class TabWidget(qt.QTabWidget):
         for i in range(self.count()):
             file_path = self.widget(i).objectName()
             paths.append(file_path if file_path != "" else self.widget(i).accessibleName())
-                
-        return paths 
-        
+
+        return paths
+
     def temporary_name(self, format:str=None) -> str:
         """Return a timestamped temporary file name with the given extension.
 
@@ -425,12 +480,15 @@ class TabWidget(qt.QTabWidget):
         now = datetime.datetime.now()
         timestamp = now.strftime("%Y%m%d_%H%M%S")
         return f"temp_{timestamp}.{format}"
-        
+
     def reload_codes(self, workspace:str=None) -> None:
         """Reconcile every open tab with its file on disk, prompting on conflicts.
 
         Args:
             workspace: (str): - path to the workspace json (unused).
+
+        Returns:
+            None.
         """
         missing = [self.widget(i).objectName() for i in range(self.count())
                    if not os.path.exists(self.widget(i).objectName())]
@@ -440,7 +498,7 @@ class TabWidget(qt.QTabWidget):
         for i in range(self.count()):
             file_path, file_temp = self.widget(i).objectName(), self.widget(i).accessibleName()
             tab_name = self.tabText(i)
-            
+
             if not tab_name.count("*"):
                 tab_name = tab_name.replace('*','')
                 if kcore.folder.read(file_path) != kcore.folder.read(file_temp):
@@ -453,16 +511,25 @@ class TabWidget(qt.QTabWidget):
                         self.setTabText(i, tab_name)
                     elif warning == 1:
                         kcore.folder.write(file_path, kcore.folder.read(file_temp))
-                        self.setTabText(i, tab_name) 
-
+                        self.setTabText(i, tab_name)
 
 
 class CodeWidget(qt.QWidget):
     """Editor tab pairing a code text edit with a search-and-replace bar."""
     text_has_been_changed = qt.signal(object)
     savingScript = qt.signal(object)
-    def __init__(self, workspace=None, file_temp=None, file_path=None) -> None:
-        """Initialize the code editor, its search bar and keyboard shortcuts."""
+
+    def __init__(self, workspace:str=None, file_temp:str=None, file_path:str=None) -> None:
+        """Initialize the code editor, its search bar and keyboard shortcuts.
+
+        Args:
+            workspace: (str): - path to the workspace json backing the tab.
+            file_temp: (str): - temporary file backing the editor content.
+            file_path: (str): - path of the script file being edited.
+
+        Returns:
+            None.
+        """
         super().__init__()
         self.code = editor.CodeTextEdit(file_temp=file_temp, file_path=file_path)
         self.code.set_completer(editor.CodeCompleter)
@@ -499,18 +566,24 @@ class CodeWidget(qt.QWidget):
         shortcut_esc.activated.connect(self.on_escape)
 
         self.show()
-        
-    
+
     def on_escape(self) -> None:
-        """Close the search bar when Escape is pressed and it is visible."""
+        """Close the search bar when Escape is pressed and it is visible.
+
+        Returns:
+            None.
+        """
         if self.search_bar.isVisible():
             self.search_bar.close_bar()
 
-    def closeEvent(self, event) -> None:
+    def closeEvent(self, event=None) -> None:
         """Prompt to save unsaved changes before the tab closes.
 
         Args:
             event: (object): - Qt close event accepted or ignored based on the choice.
+
+        Returns:
+            None.
         """
         if os.path.exists(self.file_path) and os.path.exists(self.file_temp):
             if kcore.folder.read(self.file_path) != kcore.folder.read(self.file_temp):
@@ -518,21 +591,24 @@ class CodeWidget(qt.QWidget):
                 if confirmation == 0:
                     kcore.folder.write(self.file_path, kcore.folder.read(self.file_temp))
                     event.accept()
-                    
+
                 elif confirmation == 1:
                     event.accept()
-                    
+
                 elif confirmation == 2:
                     event.ignore()
             else:
                 event.accept()
         else:
             event.accept()
-            
+
     def appendPlainText(self, message:str=None) -> None:
         """Replace the editor content with the given text.
 
         Args:
             message: (str): - text to display in the editor.
+
+        Returns:
+            None.
         """
         self.code.setPlainText(message or "")   # replaces content in one shot (not clear()+append)

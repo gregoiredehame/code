@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Jul 08, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.console
 Execute: from code_editor.core import console
 """
@@ -33,7 +33,7 @@ class Widget(qt.QWidget):
 
     Args:
         parent:   (object): - Parent widget.
-        **kwargs: (dict):   - Optional keyword arguments.
+        **kwargs:   (dict): - Optional keyword arguments.
     """
 
     # emitted when the user double-clicks a traceback line: (file_path, line_number)
@@ -42,13 +42,12 @@ class Widget(qt.QWidget):
     # File "C:/path/to/file.py", line 42, in <module>
     _TRACE_RE = re.compile(r'File "(?P<path>[^"]+)", line (?P<line>\d+)')
 
-
     def __init__(self, parent=None, **kwargs) -> None:
         """Initialize the output console widget and register the Maya command callback.
 
         Args:
             parent:   (object): - Parent widget.
-            **kwargs: (dict):   - Optional keyword arguments.
+            **kwargs:   (dict): - Optional keyword arguments.
 
         Returns:
             None.
@@ -138,17 +137,22 @@ class Widget(qt.QWidget):
 
         self.setLayout(self.layout)
 
-
     @staticmethod
-    def _safe_remove_callback(callback_id) -> None:
-        """Remove a Maya callback id, ignoring the case where it is already gone."""
+    def _safe_remove_callback(callback_id:int) -> None:
+        """Remove a Maya callback id, ignoring the case where it is already gone.
+
+        Args:
+            callback_id: (int): - The Maya callback id to remove.
+
+        Returns:
+            None.
+        """
         if callback_id is None:
             return
         try:
             om.MMessage.removeCallback(callback_id)
         except Exception:
             pass
-
 
     def closeEvent(self, event:qt.QCloseEvent) -> None:
         """Remove the Maya command output callback when the widget is closed.
@@ -162,7 +166,6 @@ class Widget(qt.QWidget):
         Widget._safe_remove_callback(getattr(self, "callback_id", None))
         self.callback_id = None
         super().closeEvent(event)
-
 
     def append_plain_text(self, text:str="") -> None:
         """Append text to the editor as plain text, bypassing QTextEdit.append()'s rich-text
@@ -182,10 +185,15 @@ class Widget(qt.QWidget):
         cursor.insertText(text)
         self.editor.setTextCursor(cursor)
 
-
     def _output_double_click(self, event) -> None:
         """On double-click, if the clicked line is a 'File "...", line N' traceback line, emit errorClicked
         so the editor can jump there. Otherwise fall back to the default double-click (word select).
+
+        Args:
+            event: (object): - The Qt mouse double-click event.
+
+        Returns:
+            None.
         """
         cursor = self.editor.cursorForPosition(event.pos())
         line = cursor.block().text()
@@ -198,7 +206,6 @@ class Widget(qt.QWidget):
                 log.exception("code output: failed to route a traceback double-click")
         qt.QTextEdit.mouseDoubleClickEvent(self.editor, event)
 
-
     # A line Python 3.11+ draws under a traceback frame to point at the failing expression: runs of
     # ^ ~ | and nothing else. Maya prefixes traceback lines with "# ", and re-wraps long ones, so the
     # prefix and a lone marker on its own line both have to be tolerated.
@@ -210,6 +217,12 @@ class Widget(qt.QWidget):
 
         Without this the log shows a column of ^ under every frame, which is noise here: the file and
         line are already there, and double-clicking them jumps to the exact spot.
+
+        Args:
+            text: (str): - The traceback text to clean.
+
+        Returns:
+            str: the text with the caret ruler lines removed.
         """
         lines = [line for line in text.splitlines() if not cls._MARKER_RE.match(line)]
         while lines and lines[0].strip() in ("", "#"):      # a prefix left stranded by a dropped line
@@ -228,6 +241,12 @@ class Widget(qt.QWidget):
 
         A MEL echo always ends in a semicolon and never begins with a comment marker, which is enough
         to tell the two apart without guessing at the content.
+
+        Args:
+            text: (str): - The line to test.
+
+        Returns:
+            bool: True when the line is a Maya MEL command echo.
         """
         line = (text or "").strip()
         if not line or line.startswith(("#", "//")):
@@ -243,12 +262,22 @@ class Widget(qt.QWidget):
         "AttributeError", then ":", then the text, then ". Did you mean: '" - and writing each as
         its own line is what shredded the traceback across the log. Buffering them and flushing on a
         short idle reassembles the block the script editor shows.
+
+        Args:
+            fragment: (str): - The error fragment to buffer.
+
+        Returns:
+            None.
         """
         self._error_parts.append(fragment)
         self._error_timer.start()
 
     def _flush_errors(self) -> None:
-        """Write the buffered fragments as one block."""
+        """Write the buffered fragments as one block.
+
+        Returns:
+            None.
+        """
         parts, self._error_parts = self._error_parts, []
         if not parts:
             return
@@ -268,13 +297,13 @@ class Widget(qt.QWidget):
         if block.strip():
             self.append_plain_text("// Error: %s" % block)
 
-    def callback(self, message, message_type, *args) -> None:
+    def callback(self, message:str, message_type:int, *args) -> None:
         """Update the output editor with Maya command messages in real-time.
 
         Args:
-            message     : (str):   - The message string from Maya.
-            message_type: (int):   - The message type constant from MCommandMessage.
-            *args       : (tuple): - Additional arguments from the callback.
+            message:      (str): - The message string from Maya.
+            message_type: (int): - The message type constant from MCommandMessage.
+            *args:      (tuple): - Additional arguments from the callback.
 
         Returns:
             None.
@@ -333,7 +362,6 @@ class Widget(qt.QWidget):
                 pass
             log.exception("code output: failed to format a Maya message")
 
-
     def clicked_echo(self, echo:str=None) -> None:
         """Update the Maya command echo state based on the selected option.
 
@@ -345,7 +373,6 @@ class Widget(qt.QWidget):
         """
         cmds.commandEcho(state=True if echo == "Echo All" else False)
 
-
     def clicked_clean(self) -> None:
         """Clear all text from the output editor.
 
@@ -356,7 +383,6 @@ class Widget(qt.QWidget):
             None.
         """
         self.editor.clear()
-
 
     def context_menu_editor(self, position) -> None:
         """Build and show a custom context menu for the output editor.
@@ -386,7 +412,6 @@ class Widget(qt.QWidget):
 
         self.menu.exec_(self.editor.mapToGlobal(position))
 
-
     def triggered_copy(self) -> None:
         """Copy the currently selected text from the editor to the clipboard.
 
@@ -401,7 +426,6 @@ class Widget(qt.QWidget):
             clipboard = qt.QApplication.clipboard()
             clipboard.setText(selected_text, qt.QClipboard.Clipboard)
             clipboard.setText(selected_text, qt.QClipboard.Selection)
-
 
     def triggered_select(self) -> None:
         """Select all text in the output editor.
@@ -423,7 +447,7 @@ def char_format(color:str=None, style:str="") -> qt.QTextCharFormat:
         style: (str): - Additional style string (currently unused).
 
     Returns:
-        (qt.QTextCharFormat): - Configured text character format.
+        qt.QTextCharFormat: the configured text character format.
     """
     if type == 'display':
         fg = qt.QColor(156, 220, 254)
@@ -460,7 +484,6 @@ class Highlighter(qt.QSyntaxHighlighter):
         parent: (object): - Parent document to highlight.
     """
 
-
     def __init__(self, parent=None) -> None:
         """Initialize the highlighter and compile regex rules.
 
@@ -481,8 +504,7 @@ class Highlighter(qt.QSyntaxHighlighter):
 
         self.rules = [(qt.QtCore.QRegularExpression(pat), index, fmt) for (pat, index, fmt) in rules] if qt.__qt__ == "pyside6" else [(qt.QtCore.QRegExp(pat), index, fmt) for (pat, index, fmt) in rules]
 
-
-    def highlightBlock(self, text) -> None:
+    def highlightBlock(self, text:str) -> None:
         """Apply syntax highlighting rules to the given block of text.
 
         Args:
@@ -510,6 +532,3 @@ class Highlighter(qt.QSyntaxHighlighter):
                     index = expression.indexIn(text, index + length)
 
         self.setCurrentBlockState(0)
-
-
-

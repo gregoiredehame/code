@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.palette
 Execute: from code_editor.core import palette
 
@@ -21,10 +22,17 @@ from . import qt
 
 
 def score(query:str, text:str) -> int:
-    """How well `text` matches `query` as a subsequence. -1 when it does not match at all.
+    """How well `text` matches `query` as a subsequence.
 
     Higher is better. A letter that starts a word counts for much more than one buried inside it, so
     "sa" prefers "Save All" over "Close All Editors", and consecutive letters beat scattered ones.
+
+    Args:
+        query: (str): - characters to look for, in order.
+        text:  (str): - candidate string to score against.
+
+    Returns:
+        int: match score, higher is better; -1 when it does not match at all.
     """
     if not query:
         return 0
@@ -50,8 +58,16 @@ class CommandPalette(qt.QWidget):
     WIDTH = 560
     ROWS = 12
 
-    def __init__(self, parent:qt.QWidget, provider) -> None:
-        """`provider` returns the QActions to offer, newest state each time it is opened."""
+    def __init__(self, parent:qt.QWidget, provider:callable) -> None:
+        """Build the overlay over `parent`, pulling its commands from `provider`.
+
+        Args:
+            parent: (qt.QWidget): - widget the overlay floats over.
+            provider: (callable): - returns the QActions to offer, newest state each time it is opened.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._provider = provider
         self._entries = []                              # [(label, shortcut, action)]
@@ -83,7 +99,11 @@ class CommandPalette(qt.QWidget):
     # ------------------------------------------------------------------ open / close
 
     def open(self) -> None:
-        """Open on the menu bar's commands."""
+        """Open on the menu bar's commands.
+
+        Returns:
+            None.
+        """
         entries = []
         for action in self._provider():
             label, _, shortcut = action.text().partition("\t")
@@ -98,6 +118,13 @@ class CommandPalette(qt.QWidget):
 
         Go to File and Go to Symbol are the same overlay with a different list, so the widget takes
         entries rather than only actions - one piece of UI, three commands.
+
+        Args:
+            entries:    (list): - rows of (label, hint, callable) to display.
+            placeholder: (str): - grey hint text shown in the empty field.
+
+        Returns:
+            None.
         """
         self._entries = entries
         self.field.setPlaceholderText(placeholder)
@@ -114,10 +141,19 @@ class CommandPalette(qt.QWidget):
             application.installEventFilter(self)
 
     def toggle(self) -> None:
-        """Open it, or close it if it is already up. The same key has to get you back out."""
+        """Open it, or close it if it is already up. The same key has to get you back out.
+
+        Returns:
+            None.
+        """
         self.close_palette() if self.isVisible() else self.open()
 
     def close_palette(self) -> None:
+        """Hide the overlay and hand focus back to the parent.
+
+        Returns:
+            None.
+        """
         application = qt.QApplication.instance()
         if application is not None:
             application.removeEventFilter(self)
@@ -127,7 +163,11 @@ class CommandPalette(qt.QWidget):
             parent.setFocus()
 
     def reposition(self) -> None:
-        """Centre it near the top of the window, the way VS Code drops it in."""
+        """Centre it near the top of the window, the way VS Code drops it in.
+
+        Returns:
+            None.
+        """
         parent = self.parentWidget()
         if parent is None:
             return
@@ -139,6 +179,14 @@ class CommandPalette(qt.QWidget):
     # ------------------------------------------------------------------ filtering
 
     def _filter(self, query:str) -> None:
+        """Re-rank and redisplay the list for the current `query`.
+
+        Args:
+            query: (str): - text typed into the field so far.
+
+        Returns:
+            None.
+        """
         ranked = []
         for label, hint, callback in self._entries:
             value = score(query, label)
@@ -159,6 +207,11 @@ class CommandPalette(qt.QWidget):
         self.reposition()
 
     def _run(self) -> None:
+        """Run the highlighted command and close the overlay.
+
+        Returns:
+            None.
+        """
         item = self.list.currentItem()
         self.close_palette()                             # close FIRST: the command may open a dialog
         if item is None:
@@ -171,7 +224,16 @@ class CommandPalette(qt.QWidget):
 
     # ------------------------------------------------------------------ keys
 
-    def eventFilter(self, watched, event):
+    def eventFilter(self, watched:object, event:qt.QEvent) -> bool:
+        """Route arrow keys to the list and dismiss on Escape or an outside click.
+
+        Args:
+            watched:  (object): - widget or object the event was sent to.
+            event: (qt.QEvent): - the event being filtered.
+
+        Returns:
+            bool: True when the event is consumed, otherwise the base result.
+        """
         kind = event.type()
         if watched is self.field and kind == qt.QEvent.KeyPress:
             if event.key() in (qt.Qt.Key_Down, qt.Qt.Key_Up):
@@ -189,8 +251,15 @@ class CommandPalette(qt.QWidget):
                 self.close_palette()          # not consumed: the click still reaches its target
         return super().eventFilter(watched, event)
 
-    def _contains(self, event) -> bool:
-        """True when a mouse event happened inside the overlay."""
+    def _contains(self, event:qt.QEvent) -> bool:
+        """True when a mouse event happened inside the overlay.
+
+        Args:
+            event: (qt.QEvent): - the mouse event to test.
+
+        Returns:
+            bool: True when the point falls inside the overlay rect.
+        """
         try:
             point = event.globalPosition().toPoint() if hasattr(event, "globalPosition") \
                 else event.globalPos()
@@ -198,7 +267,15 @@ class CommandPalette(qt.QWidget):
         except Exception:
             return True                       # unreadable position: keep it open rather than flicker
 
-    def keyPressEvent(self, event) -> None:
+    def keyPressEvent(self, event:qt.QEvent) -> None:
+        """Close the overlay on Escape, otherwise defer to the base handler.
+
+        Args:
+            event: (qt.QEvent): - the key event received.
+
+        Returns:
+            None.
+        """
         if event.key() == qt.Qt.Key_Escape:
             self.close_palette()
             return

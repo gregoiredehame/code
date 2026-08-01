@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.compat
 Execute: from code_editor.core import compat
 
@@ -22,6 +23,12 @@ class folder:
 
         Tries UTF-8 (with BOM), then common Windows/Latin encodings, and finally decodes UTF-8 with
         invalid bytes replaced so opening a mis-encoded or partly binary file never raises.
+
+        Args:
+            path: (str): - path of the file to read.
+
+        Returns:
+            str: the decoded text content of the file.
         """
         with open(path, "rb") as fh:
             raw = fh.read()
@@ -34,7 +41,15 @@ class folder:
 
     @staticmethod
     def write(path:str=None, string:str=None) -> str:
-        """Write utf-8 text to a file."""
+        """Write utf-8 text to a file.
+
+        Args:
+            path:   (str): - destination file path.
+            string: (str): - text to write to the file.
+
+        Returns:
+            str: the path that was written.
+        """
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(string or "")
         return path
@@ -51,9 +66,19 @@ class message:
     """
 
     @staticmethod
-    def prompt(title:str="Prompt", label:str="", text:str="", multilines:bool=False,
-               parent=None) -> str:
-        """Single/multi-line input dialog. Returns the entered text or None if cancelled."""
+    def prompt(title:str="Prompt", label:str="", text:str="", multilines:bool=False, parent=None) -> str:
+        """Single/multi-line input dialog.
+
+        Args:
+            title:      (str): - dialog window title.
+            label:      (str): - label shown above the input field.
+            text:       (str): - initial text placed in the input field.
+            multilines: (bool): - True uses a multi-line text input.
+            parent:  (QWidget): - widget the dialog inherits its style from.
+
+        Returns:
+            str: the entered text, or None if cancelled.
+        """
         if multilines:
             value, ok = qt.QInputDialog.getMultiLineText(parent, title, label, text)
         else:
@@ -62,7 +87,19 @@ class message:
 
     @staticmethod
     def _box(title:str, message_text:str, informative_text:str, buttons:list, icon, parent=None) -> str:
-        """Message box with named buttons. Returns the clicked button's label (or None)."""
+        """Message box with named buttons.
+
+        Args:
+            title:               (str): - dialog window title.
+            message_text:        (str): - main message text.
+            informative_text:    (str): - secondary informative text.
+            buttons:            (list): - button labels to add.
+            icon:             (object): - QMessageBox icon to display.
+            parent:          (QWidget): - widget the box inherits its style from.
+
+        Returns:
+            str: the clicked button's label, or None.
+        """
         box = qt.QMessageBox(parent)
         box.setWindowTitle(title or "")
         box.setText(message_text or "")
@@ -74,38 +111,84 @@ class message:
         return refs.get(box.clickedButton())
 
     @staticmethod
-    def critical(title:str="Error", message_text:str="", informative_text:str="", buttons:list=None,
-                 parent=None) -> str:
-        """Critical (error) message box. Returns the clicked button's label."""
+    def critical(title:str="Error", message_text:str="", informative_text:str="", buttons:list=None, parent=None) -> str:
+        """Critical (error) message box.
+
+        Args:
+            title:            (str): - dialog window title.
+            message_text:     (str): - main message text.
+            informative_text: (str): - secondary informative text.
+            buttons:         (list): - button labels to add.
+            parent:       (QWidget): - widget the box inherits its style from.
+
+        Returns:
+            str: the clicked button's label.
+        """
         return message._box(title, message_text, informative_text, buttons,
                             qt.QMessageBox.Critical, parent)
 
     @staticmethod
-    def warning(title:str="Warning", message_text:str="", informative_text:str="", buttons:list=None,
-                parent=None) -> str:
-        """Warning message box. Returns the clicked button's label."""
+    def warning(title:str="Warning", message_text:str="", informative_text:str="", buttons:list=None, parent=None) -> str:
+        """Warning message box.
+
+        Args:
+            title:            (str): - dialog window title.
+            message_text:     (str): - main message text.
+            informative_text: (str): - secondary informative text.
+            buttons:         (list): - button labels to add.
+            parent:       (QWidget): - widget the box inherits its style from.
+
+        Returns:
+            str: the clicked button's label.
+        """
         return message._box(title, message_text, informative_text, buttons,
                             qt.QMessageBox.Warning, parent)
 
     @staticmethod
     def file(title:str="Open File", directory:str="", filter:str="All Files (*.*)", parent=None) -> str:
-        """Open-file dialog. Returns the chosen path or None if cancelled.
+        """Open-file dialog.
 
         Left NATIVE on purpose: the OS dialog brings recent places, drive shortcuts and shell
         integration that a styled Qt copy would throw away for the sake of matching colours.
+
+        Args:
+            title:        (str): - dialog window title.
+            directory:    (str): - directory to open the dialog in.
+            filter:       (str): - file filter string.
+            parent:   (QWidget): - widget the dialog inherits its style from.
+
+        Returns:
+            str: the chosen path, or None if cancelled.
         """
         path, _ = qt.QFileDialog.getOpenFileName(parent, title, directory or "", filter)
         return path or None
 
     @staticmethod
     def save(title:str="Save As", directory:str="", filter:str="All Files (*.*)", parent=None) -> str:
-        """Save-file dialog. Returns the chosen path or None if cancelled."""
+        """Save-file dialog.
+
+        Args:
+            title:        (str): - dialog window title.
+            directory:    (str): - directory to open the dialog in.
+            filter:       (str): - file filter string.
+            parent:   (QWidget): - widget the dialog inherits its style from.
+
+        Returns:
+            str: the chosen path, or None if cancelled.
+        """
         path, _ = qt.QFileDialog.getSaveFileName(parent, title, directory or "", filter)
         return path or None
 
 
 def copy(string:str=None) -> None:
-    """Copy `string` to the system clipboard (a host-independent clipboard helper)."""
+    """Copy `string` to the system clipboard (a host-independent clipboard helper).
+
+    Args:
+        string: (str): - text to place on the clipboard.
+
+    Returns:
+        None
+    """
     try:
         import pyperclip
         pyperclip.copy(string or "")
@@ -118,6 +201,13 @@ def copy(string:str=None) -> None:
         pass
 
 
-def scale_dpi(value):
-    """Multiply a value by Maya's DPI scale (a host-independent DPI helper)."""
+def scale_dpi(value:float) -> int:
+    """Multiply a value by Maya's DPI scale (a host-independent DPI helper).
+
+    Args:
+        value: (float): - value to scale by the DPI multiplier.
+
+    Returns:
+        int: the value multiplied by the DPI scale, rounded.
+    """
     return round(value * qt.scale_multiplier)

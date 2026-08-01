@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.manager.panel
 Execute: from code_editor.manager import panel
 
@@ -39,7 +39,15 @@ log.setLevel(logging.INFO)
 
 
 def _rel(path:str, root:str) -> str:
-    """`path` relative to `root`; left absolute when outside it or on another drive."""
+    """`path` relative to `root`; left absolute when outside it or on another drive.
+
+    Args:
+        path: (str): - the path to make relative.
+        root: (str): - the root to make it relative to.
+
+    Returns:
+        str: the relative path, or the absolute path when outside root.
+    """
     if not path or not root or not os.path.isabs(path):
         return path
     try:
@@ -53,7 +61,15 @@ class Widget(qt.QWidget):
     """the host's Codes tab: the editor bound to the current krig workspace."""
 
     def __init__(self, parent=None, **kwargs) -> None:
-        """Build the panel, optionally bound to a workspace given as a `workspace` keyword."""
+        """Build the panel, optionally bound to a workspace given as a `workspace` keyword.
+
+        Args:
+            parent:   (QWidget): - the parent widget to nest the panel in.
+            kwargs:      (dict): - accepts `workspace` to bind the editor on build.
+
+        Returns:
+            None.
+        """
         super().__init__(parent=parent)
         self.workspace = None                 # path to codes/data.json, or None
 
@@ -86,15 +102,26 @@ class Widget(qt.QWidget):
         the host keeps calling into this panel on every tab click, and a Maya reload or a stray
         deleteUI can take the editor out from under it. Touching a dead widget raises, and that
         traceback surfaces as a broken manager rather than as a missing editor.
+
+        Returns:
+            bool: True while the embedded editor is still valid.
         """
         return qt.is_valid(getattr(self, "editor", None)) and qt.is_valid(self.editor.tabs)
 
     def _store_folder(self) -> str:
-        """Where the editor keeps its state: the workspace's codes/ folder, or nothing when unbound."""
+        """Where the editor keeps its state: the workspace's codes/ folder, or nothing when unbound.
+
+        Returns:
+            str: the codes/ folder path, or None when unbound.
+        """
         return os.path.dirname(self.workspace) if self.workspace else None
 
     def _krig_root(self) -> str:
-        """The krig workspace root (codes/data.json sits two levels down)."""
+        """The krig workspace root (codes/data.json sits two levels down).
+
+        Returns:
+            str: the krig workspace root, or an empty string when unbound.
+        """
         return os.path.dirname(os.path.dirname(self.workspace)) if self.workspace else ""
 
     def update_workspace(self, workspace:str=None) -> None:
@@ -127,6 +154,9 @@ class Widget(qt.QWidget):
         process/config.json holds {"pre": {name: [status, path, parent]}, "post": {...}}: dict order is
         run order, and `parent` is the action an entry hangs under. Folders on disk are irrelevant here
         - what you want to browse is the process, in the order it executes.
+
+        Returns:
+            list: the Pre and Post groups as Explorer nodes.
         """
         root = self._krig_root()
         config = os.path.join(root, "process", "config.json") if root else ""
@@ -141,7 +171,15 @@ class Widget(qt.QWidget):
                 for key, title in (("pre", "Pre"), ("post", "Post"))]
 
     def _section_nodes(self, entries:dict, root:str) -> list:
-        """Turn one section of config.json into nested nodes, preserving its order."""
+        """Turn one section of config.json into nested nodes, preserving its order.
+
+        Args:
+            entries: (dict): - the section's {name: [status, path, parent]} mapping.
+            root:     (str): - the krig workspace root for resolving relative paths.
+
+        Returns:
+            list: the section's entries as nested Explorer nodes.
+        """
         children = {}                            # parent action name -> [(name, entry), ...]
         for name, entry in entries.items():
             parent = entry[2] if isinstance(entry, (list, tuple)) and len(entry) > 2 else None
@@ -149,7 +187,12 @@ class Widget(qt.QWidget):
 
         emitted = set()
 
-        def build(name, entry, seen):
+        def build(name, entry, seen) -> object:
+            """Turn one action into an Explorer node, recursing into its children, guarding cycles.
+
+            Returns:
+                object: the action's Explorer node, or None when the parent chain loops.
+            """
             if name in seen:
                 return None                      # a parent chain that loops must not recurse forever
             emitted.add(name)
@@ -179,7 +222,11 @@ class Widget(qt.QWidget):
         return nodes
 
     def apply_scope(self) -> None:
-        """Show the krig's process in the Explorer (an empty tree when no project is loaded)."""
+        """Show the krig's process in the Explorer (an empty tree when no project is loaded).
+
+        Returns:
+            None.
+        """
         if not self.alive():
             return
         self.editor.sidebar.workspace.set_tree(self.process_tree() if self.workspace else [])
@@ -189,6 +236,9 @@ class Widget(qt.QWidget):
 
         The old format stored a temp copy per tab; those temps are ignored on purpose. The script paths
         are what matter, and their content on disk is the truth.
+
+        Returns:
+            None.
         """
         try:
             entries = kcore.json.read(self.workspace) or {}
@@ -212,6 +262,12 @@ class Widget(qt.QWidget):
         the host rewrites that file to keep every path relative when a project moves
         (ui.update_paths), and it expects exactly {temp: [title, script]}. Writing it here keeps that
         contract while session.json carries the details the old format could not hold.
+
+        Args:
+            data: (dict): - the editor's stored session, holding the tab list.
+
+        Returns:
+            None.
         """
         if not self.workspace:
             return
@@ -308,7 +364,14 @@ class Widget(qt.QWidget):
         self.editor.problems.refresh()
 
     def closeEvent(self, event) -> None:
-        """Flush the session before the host goes away, rather than waiting on the debounce."""
+        """Flush the session before the host goes away, rather than waiting on the debounce.
+
+        Args:
+            event: (QCloseEvent): - the Qt close event being handled.
+
+        Returns:
+            None.
+        """
         try:
             self.editor._store_session()
         except Exception:
@@ -318,7 +381,14 @@ class Widget(qt.QWidget):
     # ------------------------------------------------------------------ helpers
 
     def _index_of(self, file_path:str) -> int:
-        """The tab index showing `file_path`, or None."""
+        """The tab index showing `file_path`, or None.
+
+        Args:
+            file_path: (str): - the file path to look up among the open tabs.
+
+        Returns:
+            int: the tab index showing the path, or None when not open.
+        """
         if not self.alive():
             return None
         if not file_path:

@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.session
 Execute: from code_editor.core import session
 
@@ -28,7 +29,11 @@ import hashlib
 
 
 def _root() -> str:
-    """The per-user directory holding the editor's state (created on demand)."""
+    """The per-user directory holding the editor's state (created on demand).
+
+    Returns:
+        str: the per-user code_editor state directory.
+    """
     base = (os.environ.get("LOCALAPPDATA") or os.environ.get("XDG_STATE_HOME")
             or os.path.expanduser("~"))
     return os.path.join(base, "the host", "code_editor")
@@ -40,18 +45,25 @@ def write_atomic(path:str, text:str) -> None:
     A plain open(path, "w") empties the file first, so anything that goes wrong between that and the
     last byte written destroys the previous content. Writing a sibling temp and swapping it in makes
     the change atomic: readers see either the old file or the new one, never a half of either.
+
+    Args:
+        path: (str): - file path to write to.
+        text: (str): - text content to write.
+
+    Returns:
+        None.
     """
     folder = os.path.dirname(os.path.abspath(path)) or "."
-    temp = os.path.join(folder, ".%s.the host-tmp" % os.path.basename(path))
+    temporary = os.path.join(folder, ".%s.the host-tmp" % os.path.basename(path))
     try:
-        with open(temp, "w", encoding="utf-8", newline="") as handle:
+        with open(temporary, "w", encoding="utf-8", newline="") as handle:
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())        # the bytes are on disk before the swap, not just cached
-        os.replace(temp, path)
+        os.replace(temporary, path)
     except Exception:
         try:
-            os.remove(temp)
+            os.remove(temporary)
         except Exception:
             pass
         raise
@@ -66,6 +78,16 @@ class Session(object):
     """
 
     def __init__(self, name:str="standalone", folder:str=None, enabled:bool=True) -> None:
+        """Set up the session paths for editor `name` under `folder`.
+
+        Args:
+            name:     (str): - editor name, keys the session file.
+            folder:   (str): - directory holding the state; per-user root default.
+            enabled: (bool): - False remembers nothing, e.g. no project is loaded.
+
+        Returns:
+            None.
+        """
         self.name = name
         self.enabled = enabled           # False = remember nothing, e.g. no project is loaded
         self.folder = folder or _root()
@@ -75,7 +97,11 @@ class Session(object):
     # ---- layout
 
     def load(self) -> dict:
-        """The stored layout, or an empty one when there is nothing (or it is unreadable)."""
+        """The stored layout, or an empty one when there is nothing (or it is unreadable).
+
+        Returns:
+            dict: the stored layout, or {} when missing or unreadable.
+        """
         if not self.enabled:
             return {}
         try:
@@ -86,7 +112,14 @@ class Session(object):
             return {}
 
     def save(self, data:dict) -> None:
-        """Store the layout. Failures stay silent: losing a session must never break the editor."""
+        """Store the layout. Failures stay silent: losing a session must never break the editor.
+
+        Args:
+            data: (dict): - the layout to store.
+
+        Returns:
+            None.
+        """
         if not self.enabled:
             return
         try:
@@ -99,15 +132,39 @@ class Session(object):
 
     @staticmethod
     def key(path:str, fallback:str="") -> str:
-        """A stable filename-safe id for a buffer (its path, or `fallback` for untitled ones)."""
+        """A stable filename-safe id for a buffer (its path, or `fallback` for untitled ones).
+
+        Args:
+            path:     (str): - buffer file path.
+            fallback: (str): - id seed for untitled buffers.
+
+        Returns:
+            str: an md5 hex id.
+        """
         seed = os.path.normcase(os.path.abspath(path)) if path else "untitled:%s" % fallback
         return hashlib.md5(seed.encode("utf-8", "replace")).hexdigest()
 
     def _backup_path(self, key:str) -> str:
+        """The on-disk path of the backup file for `key`.
+
+        Args:
+            key: (str): - buffer id.
+
+        Returns:
+            str: the .bak file path.
+        """
         return os.path.join(self.backups, "%s.bak" % key)
 
     def backup(self, key:str, text:str) -> None:
-        """Keep a copy of an unsaved buffer."""
+        """Keep a copy of an unsaved buffer.
+
+        Args:
+            key:  (str): - buffer id.
+            text: (str): - buffer content.
+
+        Returns:
+            None.
+        """
         if not self.enabled:
             return
         try:
@@ -117,7 +174,14 @@ class Session(object):
             pass
 
     def recover(self, key:str) -> str:
-        """The stored copy of an unsaved buffer, or None."""
+        """The stored copy of an unsaved buffer, or None.
+
+        Args:
+            key: (str): - buffer id.
+
+        Returns:
+            str: the backup content, or None when absent.
+        """
         if not self.enabled:
             return None
         try:
@@ -127,7 +191,14 @@ class Session(object):
             return None
 
     def discard(self, key:str) -> None:
-        """Drop a backup: the buffer was saved or closed, so it is no longer at risk."""
+        """Drop a backup: the buffer was saved or closed, so it is no longer at risk.
+
+        Args:
+            key: (str): - buffer id.
+
+        Returns:
+            None.
+        """
         if not self.enabled:
             return
         try:
@@ -136,7 +207,14 @@ class Session(object):
             pass
 
     def sweep(self, keep:set) -> None:
-        """Delete every backup whose key is not in `keep` (tabs closed while we were not looking)."""
+        """Delete every backup whose key is not in `keep` (tabs closed while we were not looking).
+
+        Args:
+            keep: (set): - buffer ids to keep.
+
+        Returns:
+            None.
+        """
         if not self.enabled:
             return
         try:

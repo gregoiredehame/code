@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.qt
 Execute: from code_editor.core import qt
 
@@ -50,12 +51,27 @@ if __qt__:
 
 
 def signal(*arg_list) -> "QtCore.Signal":
-    """Binding-agnostic Signal factory (PySide uses QtCore.Signal)."""
+    """Binding-agnostic Signal factory (PySide uses QtCore.Signal).
+
+    Args:
+        arg_list: (tuple): - signal argument types forwarded to QtCore.Signal.
+
+    Returns:
+        QtCore.Signal: the created signal.
+    """
     return QtCore.Signal(*arg_list)
 
 
 def wrap_instance(pointer:object, base:object=None) -> object:
-    """Wrap a C++ pointer (e.g. a Maya MQtUtil control) into a Qt object (shiboken6/2)."""
+    """Wrap a C++ pointer (e.g. a Maya MQtUtil control) into a Qt object (shiboken6/2).
+
+    Args:
+        pointer: (object): - C++ pointer to wrap.
+        base:    (object): - Qt base class to wrap the pointer into.
+
+    Returns:
+        object: the wrapped Qt object, or None.
+    """
     if pointer is None:
         return None
     if __qt__ == "pyside6":
@@ -70,6 +86,12 @@ def is_valid(obj:object) -> bool:
 
     Widgets outlive their C++ counterpart on the python side (a reloaded module, a closed window kept
     referenced...). Touching one then raises RuntimeError, so guard with this before using a stored widget.
+
+    Args:
+        obj: (object): - Qt object to test.
+
+    Returns:
+        bool: True when the C++ side of the object is still alive.
     """
     if obj is None:
         return False
@@ -130,7 +152,14 @@ THEMES = {
 
 
 def theme(name:str=None) -> dict:
-    """The palette called `name` (a copy, so a caller cannot mutate the shared one)."""
+    """The palette called `name` (a copy, so a caller cannot mutate the shared one).
+
+    Args:
+        name: (str): - palette name to look up in THEMES.
+
+    Returns:
+        dict: a copy of the requested palette.
+    """
     return dict(THEMES.get(name or "vscode", THEMES["vscode"]))
 
 
@@ -139,7 +168,14 @@ selection_blue = THEMES["vscode"]["selection"]
 
 
 def px(n:int) -> int:
-    """Scale a pixel value by Maya's DPI setting."""
+    """Scale a pixel value by Maya's DPI setting.
+
+    Args:
+        n: (int): - pixel value to scale.
+
+    Returns:
+        int: the DPI-scaled pixel value.
+    """
     return max(1, round(n * scale_multiplier))
 
 
@@ -153,7 +189,14 @@ _SYMBOL_CACHE = {}
 
 
 def symbol_icon(kind:str) -> "QIcon":
-    """The little coloured badge for a symbol kind, built on demand and cached."""
+    """The little coloured badge for a symbol kind, built on demand and cached.
+
+    Args:
+        kind: (str): - symbol kind (class, def, module, keyword, arg).
+
+    Returns:
+        QIcon: the cached badge icon for the kind.
+    """
     if kind in _SYMBOL_CACHE:
         return _SYMBOL_CACHE[kind]
     size = px(16)
@@ -183,6 +226,12 @@ def stylesheet(name:str=None) -> str:
     inline setStyleSheet on the widget itself. That matters for more than tidiness: a rule a widget
     sets on itself beats one inherited from an ancestor, so an inline background could not be
     re-skinned by the editor that owns it, and the two themes could not coexist.
+
+    Args:
+        name: (str): - palette name to render the stylesheet in.
+
+    Returns:
+        str: the rendered stylesheet.
     """
     import os
     icons = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons").replace("\\", "/")

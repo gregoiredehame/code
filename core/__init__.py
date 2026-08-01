@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core
 Execute: from code_editor import core
 

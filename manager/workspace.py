@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Jul 08, 2026
+Modified: Aug 01, 2026
 Module: code_editor.manager.workspace
 Execute: from code_editor.manager import workspace
 """
@@ -23,7 +23,7 @@ def get_workspace(workspace:str=None) -> str:
         workspace: (str): - String path to query data from.
 
     Returns:
-        (str): - The resolved workspace file path.
+        str: The resolved workspace file path.
     """
     if workspace and os.path.basename(workspace) == "%s.json"% __data__:
         return workspace

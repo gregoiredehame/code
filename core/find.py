@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.find
 Execute: from code_editor.core import find
 
@@ -27,11 +28,18 @@ __icons__ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
 
 def _icon(name:str) -> "qt.QIcon":
-    """Load an icon by file name from core/icons."""
+    """Load an icon by file name from core/icons.
+
+    Args:
+        name: (str): - icon file name inside core/icons.
+
+    Returns:
+        qt.QIcon: the loaded icon.
+    """
     return qt.QIcon(os.path.join(__icons__, name))
 
 
-def compiled_query(text:str, regex:bool=False, word:bool=False, case:bool=False):
+def compiled_query(text:str, regex:bool=False, word:bool=False, case:bool=False) -> "re.Pattern":
     """The compiled search pattern, or None when `text` is empty or the regex is invalid.
 
     Shared by the editor's find panel and the workspace-wide Search view. The two read their options
@@ -39,7 +47,7 @@ def compiled_query(text:str, regex:bool=False, word:bool=False, case:bool=False)
     a copy in each.
 
     Args:
-        text:  (str):  - what the user typed.
+        text:   (str): - what the user typed.
         regex: (bool): - True treats `text` as a regular expression rather than a literal.
         word:  (bool): - True matches whole words only.
         case:  (bool): - True makes the match case sensitive.
@@ -67,6 +75,13 @@ def glyph(name:str, colour:str="#cccccc") -> "qt.QIcon":
     Written as characters - "\\u2191", "\\u2715", "\\u21b5" - their shape and weight are whatever the
     installed font decides, which is why they came out spindly and unlike VS Code's. Drawn here they
     are one stroke width, one size, and identical on every machine.
+
+    Args:
+        name:   (str): - which mark to draw ("up", "down", "close", "selection", "replace", ...).
+        colour: (str): - stroke colour as a hex string.
+
+    Returns:
+        qt.QIcon: the rendered icon, cached by (name, colour).
     """
     key = (name, colour)
     if key in _GLYPHS:
@@ -84,11 +99,28 @@ def glyph(name:str, colour:str="#cccccc") -> "qt.QIcon":
     painter.setPen(pen)
     painter.setBrush(qt.Qt.NoBrush)
 
-    def point(fx, fy):
+    def point(fx:float, fy:float) -> "qt.QPointF":
+        """A point at the given fractions of the icon size.
+
+        Args:
+            fx: (float): - horizontal fraction of the icon width.
+            fy: (float): - vertical fraction of the icon height.
+
+        Returns:
+            qt.QPointF: the scaled point.
+        """
         return qt.QPointF(size * fx, size * fy)
 
-    def arrow(tip_y, tail_y):
-        """A vertical shaft with a chevron head at `tip_y`."""
+    def arrow(tip_y:float, tail_y:float) -> None:
+        """A vertical shaft with a chevron head at `tip_y`.
+
+        Args:
+            tip_y:  (float): - vertical fraction where the head sits.
+            tail_y: (float): - vertical fraction where the shaft begins.
+
+        Returns:
+            None.
+        """
         painter.drawLine(point(0.5, tail_y), point(0.5, tip_y))
         head = 0.20 if tip_y < tail_y else -0.20
         painter.drawLine(point(0.30, tip_y + head), point(0.5, tip_y))
@@ -133,6 +165,7 @@ def glyph(name:str, colour:str="#cccccc") -> "qt.QIcon":
     _GLYPHS[key] = qt.QIcon(pixmap)
     return _GLYPHS[key]
 
+
 # search highlights are semantic, not theming: the same two tones read correctly on every dark
 # surface, and they are the ones VS Code uses
 MATCH_COLOR   = "#623315"                   # every other hit
@@ -145,6 +178,14 @@ class FindReplace(qt.QWidget):
     MARGIN = 12                             # gap kept from the editor's top-right corner
 
     def __init__(self, editor:qt.QWidget) -> None:
+        """Build the floating find / replace panel for one editor.
+
+        Args:
+            editor: (qt.QWidget): - the CodeTextEdit this panel searches.
+
+        Returns:
+            None.
+        """
         super().__init__(editor)
         self.editor = editor
         self.matches = []                   # [(start, end)] positions in the document
@@ -246,6 +287,17 @@ class FindReplace(qt.QWidget):
     # ------------------------------------------------------------------ construction helpers
 
     def _button(self, text:str, tip:str, checkable:bool=False, mark:str=None) -> qt.QToolButton:
+        """Build one flat tool button for the panel.
+
+        Args:
+            text:      (str): - button label, empty when it is icon only.
+            tip:       (str): - tooltip text.
+            checkable: (bool): - True makes the button a toggle.
+            mark:      (str): - glyph name to draw as the icon, if any.
+
+        Returns:
+            qt.QToolButton: the configured button.
+        """
         button = qt.QToolButton()
         button.setObjectName("codeFindNav")
         if mark:
@@ -261,6 +313,14 @@ class FindReplace(qt.QWidget):
         return button
 
     def _toggle_replace(self, on:bool) -> None:
+        """Show or hide the replace row and re-fit the panel.
+
+        Args:
+            on: (bool): - True reveals the replace field and buttons.
+
+        Returns:
+            None.
+        """
         for widget in self.replace_row:
             widget.setVisible(on)
         self._refresh_chevron()
@@ -268,7 +328,11 @@ class FindReplace(qt.QWidget):
         self.reposition()
 
     def _refresh_chevron(self) -> None:
-        """Use the tree's chevron images: a text arrow renders at whatever size the font decides."""
+        """Use the tree's chevron images: a text arrow renders at whatever size the font decides.
+
+        Returns:
+            None.
+        """
         self.toggle.setIcon(_icon("chevron_down.png" if self.toggle.isChecked()
                                   else "chevron_right.png"))
 
@@ -279,6 +343,12 @@ class FindReplace(qt.QWidget):
 
         It has to be captured rather than read live: stepping through matches replaces the selection
         with the hit, so a live read would shrink the range to the first match and lose the rest.
+
+        Args:
+            on: (bool): - True captures the selection as the search range.
+
+        Returns:
+            None.
         """
         if on:
             cursor = self.editor.textCursor()
@@ -292,7 +362,14 @@ class FindReplace(qt.QWidget):
         self.search()
 
     def _confine(self, matches:list) -> list:
-        """Keep only the hits that sit entirely inside the active range."""
+        """Keep only the hits that sit entirely inside the active range.
+
+        Args:
+            matches: (list): - all hits as (start, end) tuples.
+
+        Returns:
+            list: the hits that fall inside the active range.
+        """
         if not (self.in_selection.isChecked() and self._range):
             return matches
         # the document may have shrunk under the range since it was captured
@@ -303,7 +380,11 @@ class FindReplace(qt.QWidget):
     # ------------------------------------------------------------------ placement
 
     def reposition(self) -> None:
-        """Pin the panel to the editor's top-right, clear of the scrollbar and the minimap."""
+        """Pin the panel to the editor's top-right, clear of the scrollbar and the minimap.
+
+        Returns:
+            None.
+        """
         if not self.isVisible():
             return
         self.adjustSize()
@@ -314,7 +395,16 @@ class FindReplace(qt.QWidget):
             right -= strip
         self.move(max(0, right - self.width() - qt.px(self.MARGIN)), qt.px(4))
 
-    def eventFilter(self, watched, event):
+    def eventFilter(self, watched, event:qt.QEvent) -> bool:
+        """Reposition the panel when the editor is resized or shown.
+
+        Args:
+            watched: (QObject): - the object the event is delivered to.
+            event: (qt.QEvent): - the event being filtered.
+
+        Returns:
+            bool: the base class result.
+        """
         if watched is self.editor and event.type() in (qt.QEvent.Resize, qt.QEvent.Show):
             self.reposition()
         return super().eventFilter(watched, event)
@@ -322,7 +412,14 @@ class FindReplace(qt.QWidget):
     # ------------------------------------------------------------------ open / close
 
     def show_panel(self, replace:bool=False) -> None:
-        """Open the panel: seed the query from a one-line selection, scope it to a multi-line one."""
+        """Open the panel: seed the query from a one-line selection, scope it to a multi-line one.
+
+        Args:
+            replace: (bool): - True opens with the replace row shown and focused.
+
+        Returns:
+            None.
+        """
         cursor = self.editor.textCursor()
         selected = cursor.selectedText()
         if selected and u" " in selected:
@@ -346,12 +443,24 @@ class FindReplace(qt.QWidget):
         self.search()
 
     def close_panel(self) -> None:
-        """Hide the panel, drop the highlights and give the editor its focus back."""
+        """Hide the panel, drop the highlights and give the editor its focus back.
+
+        Returns:
+            None.
+        """
         self.setVisible(False)
         self.editor.set_search_highlights([])
         self.editor.setFocus()
 
     def keyPressEvent(self, event) -> None:
+        """Close on Escape, step matches on Enter / Shift+Enter.
+
+        Args:
+            event: (qt.QKeyEvent): - the key press event.
+
+        Returns:
+            None.
+        """
         if event.key() == qt.Qt.Key_Escape:
             self.close_panel()
             return
@@ -363,17 +472,29 @@ class FindReplace(qt.QWidget):
     # ------------------------------------------------------------------ searching
 
     def _document_changed(self) -> None:
-        """The text moved under us: re-run the search unless WE are the ones editing."""
+        """The text moved under us: re-run the search unless WE are the ones editing.
+
+        Returns:
+            None.
+        """
         if self.isVisible() and not self._replacing:
             self.search()
 
     def _pattern(self) -> "re.Pattern":
-        """The compiled query, or None when it is empty or an invalid regular expression."""
+        """The compiled query, or None when it is empty or an invalid regular expression.
+
+        Returns:
+            re.Pattern: the compiled query, or None.
+        """
         return compiled_query(self.field.edit.text(), regex=self.regex.isChecked(),
                               word=self.word.isChecked(), case=self.case.isChecked())
 
     def search(self, *_) -> None:
-        """Find every hit, highlight them, and keep the caret's one current."""
+        """Find every hit, highlight them, and keep the caret's one current.
+
+        Returns:
+            None.
+        """
         pattern = self._pattern()
         text = self.editor.toPlainText()
         found = [(m.start(), m.end()) for m in pattern.finditer(text)] if pattern else []
@@ -394,7 +515,11 @@ class FindReplace(qt.QWidget):
         self._update_count(invalid)
 
     def _paint(self) -> None:
-        """Push the hit highlights to the editor, the current one in the brighter tone."""
+        """Push the hit highlights to the editor, the current one in the brighter tone.
+
+        Returns:
+            None.
+        """
         selections = []
         for order, (start, end) in enumerate(self.matches):
             selection = qt.QTextEdit.ExtraSelection()
@@ -408,6 +533,14 @@ class FindReplace(qt.QWidget):
         self.editor.set_search_highlights(selections)
 
     def _update_count(self, invalid:bool=False) -> None:
+        """Update the result label and the enabled state of the action buttons.
+
+        Args:
+            invalid: (bool): - True when the query is a bad regular expression.
+
+        Returns:
+            None.
+        """
         if invalid:
             self.count.setText("Bad pattern")
         elif not self.field.edit.text():
@@ -422,6 +555,14 @@ class FindReplace(qt.QWidget):
     # ------------------------------------------------------------------ navigation
 
     def _go(self, step:int) -> None:
+        """Move the current match by `step` and scroll it into view.
+
+        Args:
+            step: (int): - offset to add to the current match index.
+
+        Returns:
+            None.
+        """
         if not self.matches:
             return
         self.index = (self.index + step) % len(self.matches)
@@ -435,15 +576,32 @@ class FindReplace(qt.QWidget):
         self._update_count()
 
     def go_next(self) -> None:
+        """Step to the next match.
+
+        Returns:
+            None.
+        """
         self._go(1)
 
     def go_previous(self) -> None:
+        """Step to the previous match.
+
+        Returns:
+            None.
+        """
         self._go(-1)
 
     # ------------------------------------------------------------------ replacing
 
     def _replacement(self, matched:str) -> str:
-        """The replacement text, matching the hit's casing when Preserve Case is on."""
+        """The replacement text, matching the hit's casing when Preserve Case is on.
+
+        Args:
+            matched: (str): - the text of the hit being replaced.
+
+        Returns:
+            str: the replacement text.
+        """
         text = self.replace_field.edit.text()
         if not self.preserve.isChecked() or not matched:
             return text
@@ -454,7 +612,11 @@ class FindReplace(qt.QWidget):
         return text.lower()
 
     def do_replace(self) -> None:
-        """Replace the current hit, then move to the next one."""
+        """Replace the current hit, then move to the next one.
+
+        Returns:
+            None.
+        """
         if not self.matches or self.index < 0:
             return
         start, end = self.matches[self.index]
@@ -467,7 +629,11 @@ class FindReplace(qt.QWidget):
         self.search()
 
     def do_replace_all(self) -> None:
-        """Replace every hit in one undo step, working backwards so earlier offsets stay valid."""
+        """Replace every hit in one undo step, working backwards so earlier offsets stay valid.
+
+        Returns:
+            None.
+        """
         if not self.matches:
             return
         cursor = self.editor.textCursor()
@@ -488,6 +654,15 @@ class OptionField(qt.QWidget):
     """A QLineEdit with small toggle buttons sitting inside it, on the right."""
 
     def __init__(self, placeholder:str, parent:qt.QWidget=None) -> None:
+        """Build the field with room reserved for inline option buttons.
+
+        Args:
+            placeholder:  (str): - placeholder text for the empty field.
+            parent: (qt.QWidget): - parent widget, if any.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeFindField")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -504,7 +679,15 @@ class OptionField(qt.QWidget):
         layout.addWidget(self.edit, 1)
 
     def option(self, text:str, tip:str) -> qt.QToolButton:
-        """Add a toggle inside the field, to the right of the text."""
+        """Add a toggle inside the field, to the right of the text.
+
+        Args:
+            text: (str): - button label.
+            tip:  (str): - tooltip text.
+
+        Returns:
+            qt.QToolButton: the created toggle button.
+        """
         button = qt.QToolButton(self)
         button.setObjectName("codeFindOption")
         button.setText(text)
@@ -518,11 +701,23 @@ class OptionField(qt.QWidget):
         return button
 
     def _reserve(self) -> None:
-        """Keep the typed text clear of the buttons that overlap the field."""
+        """Keep the typed text clear of the buttons that overlap the field.
+
+        Returns:
+            None.
+        """
         width = sum(b.width() + qt.px(2) for b in self.options) + qt.px(6)
         self.edit.setTextMargins(qt.px(4), 0, width, 0)
 
     def resizeEvent(self, event) -> None:
+        """Keep the option buttons pinned to the right of the field.
+
+        Args:
+            event: (qt.QResizeEvent): - the resize event.
+
+        Returns:
+            None.
+        """
         super().resizeEvent(event)
         x = self.width() - qt.px(4)
         for button in reversed(self.options):

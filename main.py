@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.main
 Execute: from code_editor import main
 
@@ -26,6 +27,12 @@ def _entry(call:str) -> str:
     on its own as `code_editor`, or nested inside a larger tool. Maya stores these strings in the
     workspace prefs and runs them at the NEXT launch - a hard-coded path would break the moment the
     package moved, and the failure would surface a restart later, far from the cause.
+
+    Args:
+        call: (str): - the call to append after the module reference, e.g. "show()".
+
+    Returns:
+        str: an import-and-call statement referencing this module.
     """
     return "import %s as main; main.%s" % (__name__, call)
 
@@ -34,6 +41,9 @@ def _reload_modules() -> None:
     """Reload the editor stack so code changes apply on the next open without restarting Maya.
 
     The list itself lives in the package, so this entry point and the host's cannot drift apart.
+
+    Returns:
+        None.
     """
     from . import reload_stack
     reload_stack()
@@ -43,9 +53,9 @@ def show(parent:str=None, width:int=None, height:int=None, restore:bool=None) ->
     """Launch the standalone code editor, docked or floating.
 
     Args:
-        parent:  (str):  - Maya panel name to dock into (e.g. "AttributeEditor"). None = float.
-        width:   (int):  - window width in pixels. None uses screen_width / 3.
-        height:  (int):  - window height in pixels. None uses screen_height / 1.4.
+        parent:   (str): - Maya panel name to dock into (e.g. "AttributeEditor"). None = float.
+        width:    (int): - window width in pixels. None uses screen_width / 3.
+        height:   (int): - window height in pixels. None uses screen_height / 1.4.
         restore: (bool): - True restores the panel state after a Maya restart.
 
     Returns:
@@ -106,6 +116,12 @@ def _build_menu(menu:str) -> None:
     Maya builds its main menus the first time they are opened, not at startup: querying the items of
     an unopened menu returns nothing, and anything inserted into it is wiped when it finally builds.
     Running its postMenuCommand is what makes it real.
+
+    Args:
+        menu: (str): - the maya menu path to build.
+
+    Returns:
+        None.
     """
     import maya.cmds as cmds
     import maya.mel as mel
@@ -122,7 +138,15 @@ def _build_menu(menu:str) -> None:
 
 
 def _find_submenu(menu:str, label:str) -> str:
-    """The full path of the submenu of `menu` carrying `label`, or ''."""
+    """The full path of the submenu of `menu` carrying `label`, or ''.
+
+    Args:
+        menu:  (str): - the parent menu path to search.
+        label: (str): - the submenu label to match.
+
+    Returns:
+        str: the submenu path, or '' if not found.
+    """
     import maya.cmds as cmds
     for item in (cmds.menu(menu, query=True, itemArray=True) or []):
         path = "%s|%s" % (menu, item)
@@ -135,8 +159,7 @@ def _find_submenu(menu:str, label:str) -> str:
     return ""
 
 
-def install_menu(menu:str="General Editors", before:str="Script Editor",
-                 label:str="Code Editor") -> str:
+def install_menu(menu:str="General Editors", before:str="Script Editor", label:str="Code Editor") -> str:
     """Add the editor to maya's Windows menu. Returns the item created, or ''.
 
     Args:
@@ -184,7 +207,11 @@ def install_menu(menu:str="General Editors", before:str="Script Editor",
 
 
 def uninstall_menu() -> None:
-    """Remove the Windows menu entry, if it is there."""
+    """Remove the Windows menu entry, if it is there.
+
+    Returns:
+        None.
+    """
     import maya.cmds as cmds
     if cmds.menuItem(MENU_ITEM, query=True, exists=True):
         cmds.deleteUI(MENU_ITEM, menuItem=True)
@@ -204,14 +231,14 @@ def close(**kwargs) -> None:
     window.Editor.window_instance = None
 
 
-def reset() -> None:
+def reset() -> "window.Editor":
     """Forget where the panel was docked and reopen it floating, at the default size.
 
     The escape hatch for a placement that has gone wrong - dragged off-screen, or tabbed into a
     panel that no longer exists. Nothing else removes the stored state any more.
 
     Returns:
-        None.
+        window.Editor: the reopened window instance.
     """
     window_name = window.Editor.title + "WorkspaceControl"
     dock.delete_workspace_instances(window_name, keep_state=False)

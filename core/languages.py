@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.languages
 Execute: from code_editor.core import languages
 
@@ -26,12 +27,30 @@ class RuleHighlighter(qt.QSyntaxHighlighter):
     multi-line comments, tracked across blocks through the highlighter's block state.
     """
 
-    def __init__(self, document, rules, block=None) -> None:
+    def __init__(self, document: object, rules: list, block: tuple = None) -> None:
+        """Store the rules and optional block-comment spec for this highlighter.
+
+        Args:
+            document: (object): - document the highlighter paints.
+            rules:      (list): - list of (pattern, format) rules.
+            block:     (tuple): - optional (opener, closer, format) for multi-line comments.
+
+        Returns:
+            None: nothing.
+        """
         super().__init__(document)
         self._rules = rules
         self._block = block
 
-    def highlightBlock(self, text) -> None:
+    def highlightBlock(self, text: str) -> None:
+        """Apply every regex rule to `text` and repaint the matched spans.
+
+        Args:
+            text: (str): - text of the block to highlight.
+
+        Returns:
+            None: nothing.
+        """
         for pattern, char_format in self._rules:
             for match in pattern.finditer(text):
                 group = 1 if match.lastindex else 0
@@ -42,8 +61,15 @@ class RuleHighlighter(qt.QSyntaxHighlighter):
         if self._block:
             self._paint_block_comment(text)
 
-    def _paint_block_comment(self, text) -> None:
-        """Colour /* ... */ style spans, keeping state so they survive across lines."""
+    def _paint_block_comment(self, text: str) -> None:
+        """Colour /* ... */ style spans, keeping state so they survive across lines.
+
+        Args:
+            text: (str): - line of text for the current block.
+
+        Returns:
+            None: nothing.
+        """
         opener, closer, char_format = self._block
         if self.previousBlockState() == 1:
             start = 0
@@ -75,13 +101,28 @@ _PALETTE = {
 
 
 def _syntax(role: str, style: str = "") -> "qt.QTextCharFormat":
-    """Char format for a token role, built with editor's own format helper."""
+    """Char format for a token role, built with editor's own format helper.
+
+    Args:
+        role:  (str): - token role name to colour.
+        style: (str): - optional extra style (bold/italic).
+
+    Returns:
+        qt.QTextCharFormat: the char format for the role.
+    """
     from . import editor                      # deferred: editor must not depend on this module
     return editor.get_syntax_format(_PALETTE.get(role, _PALETTE["text"]), role, style)
 
 
-def _words(names) -> str:
-    """Regex matching any of `names` as a whole word."""
+def _words(names: list) -> str:
+    """Regex matching any of `names` as a whole word.
+
+    Args:
+        names: (list): - names to match as whole words.
+
+    Returns:
+        str: the assembled whole-word regex.
+    """
     return r"\b(?:%s)\b" % "|".join(names)
 
 
@@ -98,8 +139,15 @@ _PS_KEYWORDS = ("begin break catch class continue data define do dynamicparam el
                 "static switch throw trap try until using var while").split()
 
 
-def rules_for(extension: str):
-    """Return (rules, block_comment) for a file extension, or (None, None) when unsupported."""
+def rules_for(extension: str) -> tuple:
+    """Return (rules, block_comment) for a file extension, or (None, None) when unsupported.
+
+    Args:
+        extension: (str): - file extension including the leading dot.
+
+    Returns:
+        tuple: the (rules, block_comment) pair, or (None, None) when unsupported.
+    """
     extension = (extension or "").lower()
 
     if extension in (".cpp", ".cxx", ".cc", ".c", ".h", ".hpp", ".hxx", ".inl"):
@@ -165,11 +213,18 @@ def rules_for(extension: str):
     return None, None
 
 
-def attach(document, path: str):
-    """Attach the highlighter matching `path` to `document`. Returns it, or None when unsupported.
+def attach(document: object, path: str) -> object:
+    """Attach the highlighter matching `path` to `document`, or None when unsupported.
 
     Keeping a reference to the returned object matters: a highlighter that gets garbage collected stops
     colouring its document.
+
+    Args:
+        document: (object): - text document to attach the highlighter to.
+        path:        (str): - file path whose extension selects the highlighter.
+
+    Returns:
+        object: the attached highlighter, or None when the extension is unsupported.
     """
     from . import editor                      # deferred, see _syntax
     extension = os.path.splitext(path or "")[1].lower()
@@ -182,6 +237,13 @@ def attach(document, path: str):
 
 
 def is_image(path: str) -> bool:
-    """True when `path` is an image the editor can preview instead of opening as text."""
+    """True when `path` is an image the editor can preview instead of opening as text.
+
+    Args:
+        path: (str): - file path to test.
+
+    Returns:
+        bool: True when the extension is a previewable image.
+    """
     return os.path.splitext(path or "")[1].lower() in (
         ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp", ".ico", ".tif", ".tiff", ".tga")

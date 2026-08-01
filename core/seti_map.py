@@ -1,8 +1,11 @@
 """
-CODE EDITOR. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
-Module: ui.code_editor.core.seti_map
+Created: Aug 01, 2026
+Modified: Aug 01, 2026
+Module: code_editor.core.seti_map
+Execute: from code_editor.core import seti_map
 
 Auto-generated VS Code (Seti) icon map: file extension / name -> icon path under core/icons/.
 Regenerate with scratchpad/gen_all_icons.py. Do not edit by hand.

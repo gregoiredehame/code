@@ -1,9 +1,9 @@
 """
-CODE EDITOR. (c)
+CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor
 Execute: import code_editor
 
@@ -54,6 +54,12 @@ def reload_stack(verbose:bool=True) -> None:
 
     Failures are printed, never swallowed: a reload that fails halfway leaves the OLD module in memory,
     and a change that simply "does not show up" is the hardest kind of bug to chase.
+
+    Args:
+        verbose: (bool): - True prints import/reload failures instead of staying silent.
+
+    Returns:
+        None: nothing is returned.
     """
     import importlib
     import pkgutil

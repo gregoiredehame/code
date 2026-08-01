@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.window
 Execute: from code_editor import window
 
@@ -56,7 +57,11 @@ __icons__ = os.path.join(os.path.dirname(os.path.abspath(__file__)), "core", "ic
 
 
 def _icon(name:str) -> "qt.QIcon":
-    """Load a tree icon by file name from core/icons."""
+    """Load a tree icon by file name from core/icons.
+
+    Returns:
+        'qt.QIcon': the icon built from core/icons/<name>.
+    """
     return qt.QIcon(os.path.join(__icons__, name))
 
 
@@ -69,6 +74,9 @@ def diff_hunks(old:str, new:str) -> list:
 
     `old_lines` is what HEAD had there, carried along so the gutter can show it and put it back
     without asking git a second question.
+
+    Returns:
+        list: the [(first, last, kind, old_lines)] hunks into NEW, 0-based.
     """
     import difflib
     hunks = []
@@ -102,6 +110,11 @@ class Breadcrumbs(qt.QWidget):
     SKIP = {".git", "__pycache__", "node_modules", ".vs", ".vscode", ".idea"}
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the empty breadcrumb strip with its horizontal layout and trailing stretch.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeBreadcrumbs")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -120,10 +133,18 @@ class Breadcrumbs(qt.QWidget):
         A row of buttons reports the SUM of their widths as its minimum, so a deep path -
         `project > ui > code_editor > window.py > Editor > __init__` - became a floor the whole
         window could not be dragged below. This is chrome: it clips instead.
+
+        Returns:
+            qt.QSize: a size with zero width and the layout's own minimum height.
         """
         return qt.QSize(0, super().minimumSizeHint().height())
 
     def _crumb(self, text:str, icon=None, slot=None) -> qt.QToolButton:
+        """Build a breadcrumb tool button, optionally with an icon and a click slot.
+
+        Returns:
+            qt.QToolButton: the configured crumb button (disabled when no slot is given).
+        """
         button = qt.QToolButton()
         button.setObjectName("codeCrumb")
         button.setText(text)
@@ -146,6 +167,9 @@ class Breadcrumbs(qt.QWidget):
         The package's own chevron_right.png, not a text "›": the glyph came out tiny and its size
         depended on whatever font the host had, while the icon is the same one the trees use and
         scales with the DPI setting like everything else.
+
+        Returns:
+            qt.QLabel: a label carrying the chevron_right pixmap.
         """
         label = qt.QLabel()
         label.setObjectName("codeCrumbSep")
@@ -158,6 +182,9 @@ class Breadcrumbs(qt.QWidget):
         VS Code's behaviour, and the one worth having: the crumb is a way INTO the folder. Sending
         the path to the OS file browser instead, as this did, took you out of the editor entirely -
         that is still available, at the foot of the menu.
+
+        Returns:
+            None.
         """
         menu = qt.QMenu(self)
         self._fill(menu, folder)
@@ -168,7 +195,11 @@ class Breadcrumbs(qt.QWidget):
         menu.exec_(point) if hasattr(menu, "exec_") else menu.exec(point)
 
     def _fill(self, menu:qt.QMenu, folder:str) -> None:
-        """List `folder`: sub-folders first as sub-menus, then the files, each opening a tab."""
+        """List `folder`: sub-folders first as sub-menus, then the files, each opening a tab.
+
+        Returns:
+            None.
+        """
         try:
             names = sorted(os.listdir(folder), key=lambda n: n.lower())
         except OSError:
@@ -194,11 +225,20 @@ class Breadcrumbs(qt.QWidget):
             action.triggered.connect(lambda *_, p=full: self.fileActivated.emit(p))
 
     def _fill_once(self, menu:qt.QMenu, folder:str) -> None:
-        """Fill a sub-menu the first time it is shown, and leave it alone afterwards."""
+        """Fill a sub-menu the first time it is shown, and leave it alone afterwards.
+
+        Returns:
+            None.
+        """
         if menu.isEmpty():
             self._fill(menu, folder)
 
     def _drop(self, widgets:list) -> None:
+        """Drop.
+
+        Returns:
+            None.
+        """
         for widget in widgets:
             self._row.removeWidget(widget)
             widget.setParent(None)
@@ -210,13 +250,20 @@ class Breadcrumbs(qt.QWidget):
 
         The trailing stretch was added first and so always sits last; inserting by index keeps every
         crumb to the left of it.
+
+        Returns:
+            int: the next insertion index (index + 1).
         """
         self._row.insertWidget(index, widget, 0)
         store.append(widget)
         return index + 1
 
     def set_path(self, file_path:str=None, roots:list=None) -> None:
-        """Rebuild the folder / file half for `file_path`, shown relative to its workspace root."""
+        """Rebuild the folder / file half for `file_path`, shown relative to its workspace root.
+
+        Returns:
+            None.
+        """
         self._drop(self._path_crumbs)
         self._drop(self._symbol_crumbs)   # the symbols belong to the old file
         self._symbol_key = None
@@ -262,7 +309,11 @@ class Breadcrumbs(qt.QWidget):
             slot=lambda b, p=folder: self._menu_for(p, b)), self._path_crumbs)
 
     def set_symbols(self, chain:list) -> None:
-        """Show the class/def chain around the caret. `chain` is [(first, last, kind, text, name)]."""
+        """Show the class/def chain around the caret. `chain` is [(first, last, kind, text, name)].
+
+        Returns:
+            None.
+        """
         key = tuple((entry[0], entry[4]) for entry in chain)
         if key == self._symbol_key:
             return                        # same scope: leave the widgets alone
@@ -280,12 +331,14 @@ class Breadcrumbs(qt.QWidget):
 class EditorPage(qt.QWidget):
     """One script tab: a CodeTextEdit and its floating find panel, saved straight to disk."""
 
-    def __init__(self, file_path:str=None, namespace:dict=None, surface:str=None,
-                 palette:dict=None, parent:qt.QWidget=None) -> None:
+    def __init__(self, file_path:str=None, namespace:dict=None, surface:str=None, palette:dict=None, parent:qt.QWidget=None) -> None:
         """Build an editor page for `file_path` (None = untitled), sharing `namespace` for execution.
 
         `surface` is the owning editor's code-area colour, passed down rather than read from a module
         global so a standalone window and an embedded panel can run different themes side by side.
+
+        Returns:
+            None.
         """
         super().__init__(parent)
         self.file_path = file_path
@@ -336,6 +389,9 @@ class EditorPage(qt.QWidget):
 
         A QShortcut wins over the editor's own keyPressEvent, so this has to be decided here - left
         to the editor, Escape would close the panel while a dozen carets stayed on screen.
+
+        Returns:
+            None.
         """
         if self.code.extra_cursors:
             self.code.clear_extra_cursors()
@@ -343,16 +399,29 @@ class EditorPage(qt.QWidget):
         self.search.close_panel()
 
     def _follow_crumbs(self) -> None:
-        """Keep the symbol half of the crumb trail on the scope holding the caret."""
+        """Keep the symbol half of the crumb trail on the scope holding the caret.
+
+        Returns:
+            None.
+        """
         line = self.code.textCursor().blockNumber()
         chain = [entry for entry in self.code._sticky_map if entry[0] <= line <= entry[1]]
         self.crumbs.set_symbols(chain)
 
     def name(self) -> str:
-        """The tab label: the file's basename, or 'untitled'."""
+        """The tab label: the file's basename, or 'untitled'.
+
+        Returns:
+            str: the file's basename, or 'untitled' when there is no path.
+        """
         return os.path.basename(self.file_path) if self.file_path else "untitled"
 
     def is_modified(self) -> bool:
+        """Whether the editor document has unsaved changes.
+
+        Returns:
+            bool: True when the document has unsaved modifications.
+        """
         return self.code.document().isModified()
 
     def save(self, path:str=None) -> bool:
@@ -360,6 +429,9 @@ class EditorPage(qt.QWidget):
 
         The write goes through a temp file swapped in with os.replace, so a failure mid-save leaves the
         original untouched instead of truncated.
+
+        Returns:
+            bool: True when the file was written, False otherwise.
         """
         path = path or self.file_path
         if not path:
@@ -392,6 +464,11 @@ class PreviewTabBar(qt.QTabBar):
     FONT     = 13                               # must match the QTabBar::tab rule in the stylesheet
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Set up the tab bar with its pinned label font and default preview predicate.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.is_preview = lambda index: False       # replaced by the window
         font = self.font()                          # the labels are hand-drawn: pin the size ourselves
@@ -399,6 +476,11 @@ class PreviewTabBar(qt.QTabBar):
         self.setFont(font)
 
     def paintEvent(self, event) -> None:
+        """Draw each tab: shape from the style, then icon and label laid out by hand.
+
+        Returns:
+            None.
+        """
         painter = qt.QStylePainter(self)
         option = qt.QStyleOptionTab()
         for index in range(self.count()):
@@ -434,6 +516,11 @@ class ImagePage(qt.QWidget):
     """Image preview tab: the picture centred on a checkerboard, with its size in a header."""
 
     def __init__(self, path:str, parent:qt.QWidget=None) -> None:
+        """Build the image preview page: a header line over the picture on a scroll area.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.file_path = path
         self._title = os.path.basename(path)
@@ -461,9 +548,19 @@ class ImagePage(qt.QWidget):
         self._render()
 
     def name(self) -> str:
+        """The tab label: the image file's basename.
+
+        Returns:
+            str: the image file's basename.
+        """
         return self._title
 
     def _describe(self) -> str:
+        """Build the header line: title with pixel dimensions and file size, or a cannot-display note.
+
+        Returns:
+            str: the header text (title plus dimensions and size, or a cannot-display note).
+        """
         if self.pixmap.isNull():
             return "%s  —  cannot be displayed" % self._title
         try:
@@ -475,7 +572,11 @@ class ImagePage(qt.QWidget):
                                           self.pixmap.height(), unit)
 
     def _render(self) -> None:
-        """Scale down to fit the view, never up: a small icon stays at its native size."""
+        """Scale down to fit the view, never up: a small icon stays at its native size.
+
+        Returns:
+            None.
+        """
         if self.pixmap.isNull():
             self.view.setText("Cannot display this image.")
             self.view.setObjectName("codeImageView")
@@ -489,6 +590,11 @@ class ImagePage(qt.QWidget):
             self.view.setPixmap(self.pixmap)
 
     def resizeEvent(self, event) -> None:
+        """Re-scale the image to fit whenever the page is resized.
+
+        Returns:
+            None.
+        """
         super().resizeEvent(event)
         self._render()
 
@@ -506,25 +612,42 @@ class BadgeTabBar(qt.QTabBar):
     WIDEST = "(99+)"                            # counts are capped here, so the tab cannot grow more
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Set up the badge tab bar's per-tab label store and width-reservation set.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._labels = {}                       # tab index -> its text without any count
         self._reserved = set()                  # tabs that keep room for the longest count
 
     def set_badge(self, index:int, count:int) -> None:
-        """Write `count` after the tab's label; 0 leaves the label alone."""
+        """Write `count` after the tab's label; 0 leaves the label alone.
+
+        Returns:
+            None.
+        """
         base = self._labels.setdefault(index, self.tabText(index))
         self._reserved.add(index)
         self.setTabText(index, "%s %s" % (base, self._text(count)) if count else base)
         self.updateGeometry()
 
     def _text(self, count:int) -> str:
+        """Format a count as a parenthesised badge, capped at the widest value.
+
+        Returns:
+            str: the badge text, e.g. '(12)', or '(99+)' once capped.
+        """
         return "(%d)" % count if count < 100 else self.WIDEST
 
-    def tabSizeHint(self, index:int):
+    def tabSizeHint(self, index:int) -> object:
         """Hold a badge-carrying tab at the width of its longest possible label.
 
         Sizing it to the CURRENT text would widen the tab the moment a problem appears and shove
         every tab after it sideways.
+
+        Returns:
+            object: the tab size, widened to fit the longest possible badge when reserved.
         """
         size = super().tabSizeHint(index)
         if index in self._reserved:
@@ -541,6 +664,11 @@ class DiffView(qt.QPlainTextEdit):
     """
 
     def __init__(self, path:str="", parent:qt.QWidget=None) -> None:
+        """Build a read-only, syntax-highlighted diff pane with a minimap strip for `path`.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setReadOnly(True)
         self.setWordWrapMode(qt.QTextOption.NoWrap)
@@ -556,7 +684,11 @@ class DiffView(qt.QPlainTextEdit):
         self.textChanged.connect(self.minimap.update)
 
     def resizeEvent(self, event) -> None:
-        """Keep the minimap pinned to the right edge and reserve its width in the viewport."""
+        """Keep the minimap pinned to the right edge and reserve its width in the viewport.
+
+        Returns:
+            None.
+        """
         super().resizeEvent(event)
         strip = self.minimap.strip_width()
         rect = self.contentsRect()
@@ -575,8 +707,12 @@ class DiffPage(qt.QWidget):
     ADDED   = "#123d1b"
     GUTTER  = "#9d9d9d"
 
-    def __init__(self, path:str, old_text:str, new_text:str, title:str="",
-                 parent:qt.QWidget=None) -> None:
+    def __init__(self, path:str, old_text:str, new_text:str, title:str="", parent:qt.QWidget=None) -> None:
+        """Build the side-by-side diff of `path` from `old_text` and `new_text`.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.file_path = path
         self._title = title or os.path.basename(path)
@@ -605,13 +741,27 @@ class DiffPage(qt.QWidget):
         self.right.verticalScrollBar().valueChanged.connect(self.left.verticalScrollBar().setValue)
 
     def name(self) -> str:
+        """The tab label of the diff page.
+
+        Returns:
+            str: the diff page's title.
+        """
         return self._title
 
     def _make_side(self) -> "DiffView":
+        """Build one DiffView pane for this file.
+
+        Returns:
+            'DiffView': a diff pane for one side of the comparison.
+        """
         return DiffView(self.file_path)
 
     def _fill(self, old_text:str, new_text:str) -> None:
-        """Align both revisions with difflib and paint the changed rows."""
+        """Align both revisions with difflib and paint the changed rows.
+
+        Returns:
+            None.
+        """
         import difflib
         old_lines = old_text.splitlines()
         new_lines = new_text.splitlines()
@@ -634,7 +784,11 @@ class DiffPage(qt.QWidget):
         self._render(self.right, right_rows)
 
     def _render(self, view, rows) -> None:
-        """Write the rows into `view`, tinting whole lines through extra selections."""
+        """Write the rows into `view`, tinting whole lines through extra selections.
+
+        Returns:
+            None.
+        """
         view.setPlainText("\n".join(text for text, _ in rows))
         selections = []
         document = view.document()
@@ -664,7 +818,11 @@ _icon_cache = {}
 
 
 def file_icon(path:str) -> "qt.QIcon":
-    """Return the Seti (VS Code) icon for a file: exact-name match first, then extension, then default."""
+    """Return the Seti (VS Code) icon for a file: exact-name match first, then extension, then default.
+
+    Returns:
+        'qt.QIcon': the cached Seti icon matching the file's name or extension.
+    """
     base = os.path.basename(path).lower()
     rel = seti_map.NAME_ICON.get(base)
     if rel is None:
@@ -678,7 +836,11 @@ def file_icon(path:str) -> "qt.QIcon":
 
 
 def is_dim(name:str) -> bool:
-    """True if `name` should be shown dimmed (dotfiles, caches, vcs/build dirs, compiled files)."""
+    """True if `name` should be shown dimmed (dotfiles, caches, vcs/build dirs, compiled files).
+
+    Returns:
+        bool: True when the name should be shown dimmed.
+    """
     low = name.lower()
     return (low in _DIM_NAMES or low.startswith(".")
             or os.path.splitext(low)[1] in _DIM_EXTS)
@@ -688,6 +850,11 @@ class CollapsibleSection(qt.QWidget):
     """A VS-Code-style sidebar section: a clickable header (chevron + TITLE) over a collapsible body."""
 
     def __init__(self, title:str="", body:qt.QWidget=None, expanded:bool=True, parent:qt.QWidget=None) -> None:
+        """Build a collapsible sidebar section: a clickable header over `body`.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._expanded = expanded
         self._title = title
@@ -727,7 +894,11 @@ class CollapsibleSection(qt.QWidget):
         self._refresh_chevron()
 
     def _set(self, name:str, state:bool) -> None:
-        """Flip a stylesheet property on the header and make the style re-read it."""
+        """Flip a stylesheet property on the header and make the style re-read it.
+
+        Returns:
+            None.
+        """
         value = "true" if state else "false"
         if self.header.property(name) == value:
             return
@@ -737,11 +908,17 @@ class CollapsibleSection(qt.QWidget):
 
     def set_leading(self, leading:bool=True) -> None:
         """Leading sections drop their top border: the view header above them already drew that rule,
+
+        Returns:
+            None.
         and the two together made a 2px line under Explorer while Search showed a 1px one."""
         self._set("first", leading)
 
     def set_closing(self, closing:bool=True) -> None:
         """Close the section with a bottom rule. Set on the last one of a fully collapsed column, so
+
+        Returns:
+            None.
         the stacked headers read as a block instead of dissolving into the empty space below."""
         self._set("closing", closing)
 
@@ -753,6 +930,9 @@ class CollapsibleSection(qt.QWidget):
         hint during construction, BEFORE the stylesheet gave the header its padding and border, and
         the column stayed wrong until every section had been toggled once. Qt re-reads a sizeHint on
         its own whenever the style changes; a number written into setMaximumHeight it cannot.
+
+        Returns:
+            None.
         """
         grows = self._expanded and self.resizable
         self.setSizePolicy(qt.QSizePolicy.Expanding,
@@ -764,16 +944,28 @@ class CollapsibleSection(qt.QWidget):
         A method rather than a bare attribute because the size policy has to be re-applied: setting
         `resizable` alone left the section on the Expanding policy it was built with, and Open Editors
         went on stretching over the whole column.
+
+        Returns:
+            None.
         """
         self.resizable = bool(state)
         self._apply_policy()
 
     def refresh_height(self) -> None:
-        """Tell the layout the content changed height, so it re-reads the body's hint."""
+        """Tell the layout the content changed height, so it re-reads the body's hint.
+
+        Returns:
+            None.
+        """
         self.body.updateGeometry()
         self.updateGeometry()
 
     def _toggle(self) -> None:
+        """Flip the section open or closed, refresh the chevron and fire the callbacks.
+
+        Returns:
+            None.
+        """
         self._expanded = not self._expanded
         self.body.setVisible(self._expanded)
         self._apply_policy()
@@ -784,13 +976,21 @@ class CollapsibleSection(qt.QWidget):
             self.on_toggle(self)
 
     def set_suffix(self, text:str="") -> None:
-        """Show a context note beside the title - VS Code puts the file name next to TIMELINE."""
+        """Show a context note beside the title - VS Code puts the file name next to TIMELINE.
+
+        Returns:
+            None.
+        """
         self.suffix.setText(text or "")
         self.suffix.setVisible(bool(text))
         self._place_suffix()
 
     def _place_suffix(self) -> None:
-        """Sit the note just after the title, and let it elide rather than push the row wider."""
+        """Sit the note just after the title, and let it elide rather than push the row wider.
+
+        Returns:
+            None.
+        """
         if not self.suffix.isVisible():
             return
         metrics = qt.QFontMetrics(self.header.font())
@@ -802,13 +1002,28 @@ class CollapsibleSection(qt.QWidget):
         self.suffix.setGeometry(start, 0, room, self.header.height())
 
     def _header_resized(self, event) -> None:
+        """Re-place the suffix label after the header button is resized.
+
+        Returns:
+            None.
+        """
         qt.QToolButton.resizeEvent(self.header, event)
         self._place_suffix()
 
     def _refresh_chevron(self) -> None:
+        """Set the header chevron icon to match the expanded state.
+
+        Returns:
+            None.
+        """
         self.header.setIcon(_icon("chevron_down.png" if self._expanded else "chevron_right.png"))
 
     def is_expanded(self) -> bool:
+        """Whether the section is currently expanded.
+
+        Returns:
+            bool: True when the section body is shown.
+        """
         return self._expanded
 
 
@@ -821,6 +1036,11 @@ class ViewHeader(qt.QWidget):
     """
 
     def __init__(self, title:str, parent:qt.QWidget=None) -> None:
+        """Build the view header row: the title label and the '...' actions button.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeViewHeader")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -844,12 +1064,20 @@ class ViewHeader(qt.QWidget):
         row.addWidget(self.more, 0)
 
     def set_sections(self, sections:list) -> None:
-        """`sections` is [(label, CollapsibleSection)]; an empty list hides the "..." entirely."""
+        """`sections` is [(label, CollapsibleSection)]; an empty list hides the "..." entirely.
+
+        Returns:
+            None.
+        """
         self._sections = sections
         self.more.setVisible(bool(sections))
 
     def _menu(self) -> None:
-        """A checkable entry per section, ticked when the section is showing."""
+        """A checkable entry per section, ticked when the section is showing.
+
+        Returns:
+            None.
+        """
         menu = qt.QMenu(self.more)
         for label, section in self._sections:
             action = menu.addAction(label)
@@ -865,6 +1093,9 @@ class ViewHeader(qt.QWidget):
 
         Hiding every one of them is allowed: the header itself never goes away, so the menu that put
         them away is still there to bring them back.
+
+        Returns:
+            None.
         """
         section.setVisible(state)
         stack = section.parent()
@@ -889,6 +1120,9 @@ class SectionStack(qt.QSplitter):
     def __init__(self, sections, parent:qt.QWidget=None, leads:bool=True) -> None:
         """`leads` says this stack is the first thing under the view header, so its own first section
         drops the top border that header already draws. The Explorer passes False: there, Open Editors
+
+        Returns:
+            None.
         leads the column and the stack starts mid-way down."""
         super().__init__(qt.Qt.Vertical, parent)
         self.setObjectName("codeSectionStack")
@@ -913,6 +1147,9 @@ class SectionStack(qt.QSplitter):
         Every number used comes from the splitter's CURRENT layout, never from a hint measured ahead
         of time: `room` is the height it really has, and a collapsed section is asked for 0 and left
         to come back at its own header.
+
+        Returns:
+            None.
         """
         sizes = self.sizes()
         # the column's real height, not the sum of the sizes: fully collapsed, the children only
@@ -949,7 +1186,11 @@ class SectionStack(qt.QSplitter):
         self._open_before = opened
 
     def _mark_closing(self) -> None:
-        """Only the last visible header closes the block, and only while the whole column is shut."""
+        """Only the last visible header closes the block, and only while the whole column is shut.
+
+        Returns:
+            None.
+        """
         shown = [s for s in self._sections if not s.isHidden()]
         shut = not any(s.is_expanded() for s in shown)
         last = shown[-1] if shown else None
@@ -996,7 +1237,12 @@ class GitStatusDelegate(qt.QStyledItemDelegate):
     TEXT_ON     = "#e8e8e8"    # selected row
     TEXT_DIM    = "#7a7a7a"    # dotfiles, caches, compiled artefacts
 
-    def __init__(self, tree, parent=None):
+    def __init__(self, tree, parent=None) -> None:
+        """Store the tree reference and default the leaf-alignment flag on.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._tree = tree                            # needed to compute indentation depth for guide lines
         # True pulls a childless row left into the chevron column its siblings use, which is what lines
@@ -1004,7 +1250,12 @@ class GitStatusDelegate(qt.QStyledItemDelegate):
         # process) turns it off: there, a row's children must simply sit one step in from their parent.
         self.align_leaves = True
 
-    def paint(self, painter, option, index):
+    def paint(self, painter, option, index) -> None:
+        """Custom-paint one tree row: row band, indent guides, icon, tinted name and git marker.
+
+        Returns:
+            None.
+        """
         painter.save()
         rect = qt.QRect(option.rect)
         selected = bool(option.state & qt.QStyle.State_Selected)
@@ -1106,7 +1357,12 @@ class GitStatusDelegate(qt.QStyledItemDelegate):
                 painter.drawText(mrect, qt.Qt.AlignRight | qt.Qt.AlignVCenter, letter)
         painter.restore()
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option, index) -> object:
+        """Force a minimum row height of 22px.
+
+        Returns:
+            object: the item size hint, raised to at least 22px tall.
+        """
         size = super().sizeHint(option, index)
         size.setHeight(max(size.height(), qt.px(22)))
         return size
@@ -1135,6 +1391,11 @@ class WorkspacePanel(qt.QWidget):
     _DIM_ROLE    = _DIM_ROLE
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the workspace panel: a single lazily-loaded tree over the root folders.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeWorkspace")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -1186,7 +1447,11 @@ class WorkspacePanel(qt.QWidget):
     # ---- item helpers
 
     def _make_item(self, path:str, is_dir:bool, label:str=None) -> "qt.QStandardItem":
-        """Build a tree item for `path`. Folders get no icon (just the chevron); files get a Seti icon."""
+        """Build a tree item for `path`. Folders get no icon (just the chevron); files get a Seti icon.
+
+        Returns:
+            'qt.QStandardItem': the tree item built for `path`.
+        """
         name = os.path.basename(path.rstrip("/\\")) or path
         item = qt.QStandardItem(label if label is not None else name)
         item.setEditable(False)
@@ -1216,6 +1481,9 @@ class WorkspacePanel(qt.QWidget):
 
         Every segment but the last is a directory, so it gets group 0; the file itself gets group 1. That
         is what makes `core/compat.py` come before `__init__.py`, exactly like the tree shows them.
+
+        Returns:
+            tuple: a per-segment sort key placing folders (group 0) before files (group 1).
         """
         parts = relative.replace("\\", "/").split("/")
         return tuple([(0, part.lower()) for part in parts[:-1]] + [(1, parts[-1].lower())])
@@ -1227,6 +1495,9 @@ class WorkspacePanel(qt.QWidget):
         in tree order - not the most severe one - so a parent takes the colour of what you see first when
         you expand it, which is how VS Code decorates folders. Deleted files are skipped: they are no
         longer in the tree, and letting them win would paint whole branches red.
+
+        Returns:
+            str: the status letter (M/A/U/D/R/S), or None when unchanged.
         """
         norm = os.path.normpath(path)
         if is_dir and norm in self._submodules:
@@ -1249,7 +1520,11 @@ class WorkspacePanel(qt.QWidget):
         return best_letter
 
     def _populate(self, parent_item:"qt.QStandardItem", folder:str) -> None:
-        """Read `folder` and fill `parent_item` with its children (dirs first, then files, alphabetical)."""
+        """Read `folder` and fill `parent_item` with its children (dirs first, then files, alphabetical).
+
+        Returns:
+            None.
+        """
         parent_item.removeRows(0, parent_item.rowCount())   # drop the placeholder / stale rows
         try:
             entries = os.listdir(folder)
@@ -1266,7 +1541,11 @@ class WorkspacePanel(qt.QWidget):
     # ---- git status
 
     def refresh_git(self) -> None:
-        """Re-read git status + submodules for every root, then re-apply markers on all visible items."""
+        """Re-read git status + submodules for every root, then re-apply markers on all visible items.
+
+        Returns:
+            None.
+        """
         self._git = {}
         self._submodules = set()
         for root in self.roots:
@@ -1281,6 +1560,9 @@ class WorkspacePanel(qt.QWidget):
 
     def _reapply_status(self, parent_item) -> None:
         """Walk the already-built items and refresh their status role. Only descends into LOADED folders,
+
+        Returns:
+            None.
         so a not-yet-expanded folder keeps its lazy-load placeholder intact (fixes non-expandable roots)."""
         for row in range(parent_item.rowCount()):
             item = parent_item.child(row)       # invisibleRootItem and QStandardItem both expose child()
@@ -1294,7 +1576,11 @@ class WorkspacePanel(qt.QWidget):
                 self._reapply_status(item)
 
     def _on_expanded(self, index) -> None:
-        """Lazy-load a folder's children the first time it is expanded."""
+        """Lazy-load a folder's children the first time it is expanded.
+
+        Returns:
+            None.
+        """
         item = self.model.itemFromIndex(index)
         if item is None or item.data(self._LOADED_ROLE):
             return
@@ -1305,7 +1591,11 @@ class WorkspacePanel(qt.QWidget):
     # ---- persistence
 
     def roots_setting(self) -> list:
-        """The root folders saved from the last session."""
+        """The root folders saved from the last session.
+
+        Returns:
+            list: the root folder paths saved in the workspace optionVar.
+        """
         try:
             import maya.cmds as cmds
             if cmds.optionVar(exists=WORKSPACE_OPTIONVAR):
@@ -1315,12 +1605,21 @@ class WorkspacePanel(qt.QWidget):
         return []
 
     def _restore(self) -> None:
-        """Re-add the root folders from the last session."""
+        """Re-add the root folders from the last session.
+
+        Returns:
+            None.
+        """
         for path in self.roots_setting():
             self._add_root(path)
         self.refresh_git()
 
     def _save(self) -> None:
+        """Persist the current root folders to the Maya optionVar.
+
+        Returns:
+            None.
+        """
         try:
             import maya.cmds as cmds
             cmds.optionVar(stringValue=(WORKSPACE_OPTIONVAR, json.dumps(self.roots)))
@@ -1329,12 +1628,21 @@ class WorkspacePanel(qt.QWidget):
 
     def _update_empty_hint(self) -> None:
         # the "Add Folder to Workspace" hint only makes sense when the user owns the tree
+        """Show the empty-workspace hint only when the personal tree has no roots.
+
+        Returns:
+            None.
+        """
         self.empty_hint.setVisible(self.virtual is None and not self.roots)
 
     # ---- folders
 
     def add_folder(self) -> None:
-        """Ask for a folder and add it as a new workspace root."""
+        """Ask for a folder and add it as a new workspace root.
+
+        Returns:
+            None.
+        """
         start = self.roots[-1] if self.roots else ""
         folder = qt.QFileDialog.getExistingDirectory(self, "Add Folder to Workspace", start, qt.QFileDialog.ShowDirsOnly)
         if folder and folder not in self.roots:
@@ -1344,7 +1652,11 @@ class WorkspacePanel(qt.QWidget):
             self.refresh_git()
 
     def _add_root(self, path:str, label:str=None) -> None:
-        """Add `path` as a bold top-level node of the shared tree."""
+        """Add `path` as a bold top-level node of the shared tree.
+
+        Returns:
+            None.
+        """
         if not path or not os.path.isdir(path) or path in self.roots:
             return
         label = label or (os.path.basename(path.rstrip("/\\")) or path).upper()
@@ -1354,7 +1666,11 @@ class WorkspacePanel(qt.QWidget):
         self.roots.append(path)
 
     def remove_folder(self, path:str) -> None:
-        """Remove the workspace root at `path`."""
+        """Remove the workspace root at `path`.
+
+        Returns:
+            None.
+        """
         for row in range(self.model.rowCount()):
             it = self.model.item(row)
             if it is not None and it.data(self._PATH_ROLE) == path:
@@ -1374,6 +1690,9 @@ class WorkspacePanel(qt.QWidget):
 
         An empty list is meaningful - "there is a host, it just has nothing to show" - and must render
         an empty tree rather than falling back to the personal roots of the standalone window.
+
+        Returns:
+            None.
         """
         self.virtual = nodes
         # the chevron-column pull-back is a filesystem idiom (a file lining up under a sibling folder's
@@ -1387,6 +1706,9 @@ class WorkspacePanel(qt.QWidget):
         The open folders are remembered across the rebuild. Without that, anything that refreshes -
         creating a file, renaming, a git status poll - collapses the whole tree and drops you back at
         the roots, which is maddening when you were three levels deep.
+
+        Returns:
+            None.
         """
         opened = self._opened_folders()
         self.model.clear()
@@ -1405,10 +1727,19 @@ class WorkspacePanel(qt.QWidget):
             self._reopen_folders(opened)
 
     def _opened_folders(self) -> set:
-        """The paths of every folder currently expanded."""
+        """The paths of every folder currently expanded.
+
+        Returns:
+            set: the normcased paths of every currently expanded folder.
+        """
         opened = set()
 
-        def walk(item):
+        def walk(item) -> None:
+            """Recurse into `item`, collecting the paths of expanded folders.
+
+            Returns:
+                None.
+            """
             for row in range(item.rowCount()):
                 child = item.child(row)
                 path = child.data(self._PATH_ROLE) if child is not None else None
@@ -1426,11 +1757,19 @@ class WorkspacePanel(qt.QWidget):
 
         Children are read lazily, so a folder has to be populated before its own children can be
         expanded - hence the walk rather than a flat pass over the set.
+
+        Returns:
+            None.
         """
         if not opened:
             return
 
-        def walk(item):
+        def walk(item) -> None:
+            """Recurse into `item`, re-expanding folders that were open before.
+
+            Returns:
+                None.
+            """
             for row in range(item.rowCount()):
                 child = item.child(row)
                 path = child.data(self._PATH_ROLE) if child is not None else None
@@ -1444,7 +1783,11 @@ class WorkspacePanel(qt.QWidget):
         walk(self.model.invisibleRootItem())
 
     def _make_virtual(self, node:dict, top:bool=False) -> "qt.QStandardItem":
-        """Build one item of an explicit tree, and its children under it."""
+        """Build one item of an explicit tree, and its children under it.
+
+        Returns:
+            'qt.QStandardItem': the item built for `node`, with its children attached.
+        """
         path = node.get("path")
         item = qt.QStandardItem(node.get("label") or (os.path.basename(path) if path else ""))
         item.setEditable(False)
@@ -1467,12 +1810,21 @@ class WorkspacePanel(qt.QWidget):
     # ---- interaction
 
     def _clicked_path(self, pos) -> str:
+        """The path of the tree item under `pos`, if any.
+
+        Returns:
+            str: the item's path under `pos`, or None.
+        """
         index = self.tree.indexAt(pos)
         item  = self.model.itemFromIndex(index) if index.isValid() else None
         return item.data(self._PATH_ROLE) if item is not None else None
 
     def _on_clicked(self, index) -> None:
-        """Single click: toggle a folder, or open a file as a PREVIEW tab (italic, reused)."""
+        """Single click: toggle a folder, or open a file as a PREVIEW tab (italic, reused).
+
+        Returns:
+            None.
+        """
         item = self.model.itemFromIndex(index)
         if item is None:
             return
@@ -1483,7 +1835,11 @@ class WorkspacePanel(qt.QWidget):
             self.fileActivated.emit(path)
 
     def _on_double_clicked(self, index) -> None:
-        """Double click: keep the file open for good (the click that preceded it opened the preview)."""
+        """Double click: keep the file open for good (the click that preceded it opened the preview).
+
+        Returns:
+            None.
+        """
         item = self.model.itemFromIndex(index)
         if item is None:
             return
@@ -1497,6 +1853,9 @@ class WorkspacePanel(qt.QWidget):
         Most entries only make sense for one of the two - New File belongs to a folder, Rename and
         Run belong to a file - and offering the union with half of it greyed out reads worse than
         offering the set that applies.
+
+        Returns:
+            None.
         """
         path = self._clicked_path(pos)
         if path is None and self.virtual is None and len(self.roots) == 1:
@@ -1552,7 +1911,11 @@ class WorkspacePanel(qt.QWidget):
     # ---- file operations
 
     def _relative(self, path:str) -> str:
-        """`path` relative to the workspace root that holds it, or its bare name."""
+        """`path` relative to the workspace root that holds it, or its bare name.
+
+        Returns:
+            str: the path relative to its workspace root, or its bare name.
+        """
         for root in self.roots:
             try:
                 relative = os.path.relpath(path, root)
@@ -1563,7 +1926,11 @@ class WorkspacePanel(qt.QWidget):
         return os.path.basename(path)
 
     def _new_entry(self, folder:str, make_folder:bool) -> None:
-        """Create a file or a folder inside `folder`; a new file is opened straight away."""
+        """Create a file or a folder inside `folder`; a new file is opened straight away.
+
+        Returns:
+            None.
+        """
         label = "Folder" if make_folder else "File"
         name = compat.message.prompt(title="New %s" % label, label="Name:", text="", parent=self)
         if not name:
@@ -1588,7 +1955,11 @@ class WorkspacePanel(qt.QWidget):
             self.filePinned.emit(target)
 
     def _reveal_after(self, target:str, parent_folder:str) -> None:
-        """Refresh, keeping the folder we just created something in open so the result is visible."""
+        """Refresh, keeping the folder we just created something in open so the result is visible.
+
+        Returns:
+            None.
+        """
         opened = self._opened_folders()
         opened.add(os.path.normcase(parent_folder))
         self.model.clear()
@@ -1601,10 +1972,19 @@ class WorkspacePanel(qt.QWidget):
         self._select_path(target)
 
     def _select_path(self, path:str) -> None:
-        """Put the selection on `path` if it is currently in the tree."""
+        """Put the selection on `path` if it is currently in the tree.
+
+        Returns:
+            None.
+        """
         wanted = os.path.normcase(path)
 
-        def walk(item):
+        def walk(item) -> object:
+            """Recurse into `item`, selecting the child whose path matches.
+
+            Returns:
+                object: True once the matching item was found and selected.
+            """
             for row in range(item.rowCount()):
                 child = item.child(row)
                 current = child.data(self._PATH_ROLE) if child is not None else None
@@ -1620,12 +2000,20 @@ class WorkspacePanel(qt.QWidget):
         walk(self.model.invisibleRootItem())
 
     def _clip(self, path:str, cut:bool) -> None:
-        """Remember a path for the next Paste, and put it on the system clipboard too."""
+        """Remember a path for the next Paste, and put it on the system clipboard too.
+
+        Returns:
+            None.
+        """
         self._clipboard = (path, cut)
         compat.copy(os.path.normpath(path))
 
     def _paste(self, folder:str) -> None:
-        """Copy or move whatever Cut/Copy remembered into `folder`."""
+        """Copy or move whatever Cut/Copy remembered into `folder`.
+
+        Returns:
+            None.
+        """
         if not self._clipboard or not os.path.isdir(folder):
             return
         source, cut = self._clipboard
@@ -1651,7 +2039,11 @@ class WorkspacePanel(qt.QWidget):
 
     @staticmethod
     def _unique(path:str) -> str:
-        """`path` with " copy" appended until nothing sits at that name."""
+        """`path` with " copy" appended until nothing sits at that name.
+
+        Returns:
+            str: a variant of `path` with ' copy' appended until the name is free.
+        """
         stem, extension = os.path.splitext(path)
         candidate, index = "%s copy%s" % (stem, extension), 2
         while os.path.exists(candidate):
@@ -1660,7 +2052,11 @@ class WorkspacePanel(qt.QWidget):
         return candidate
 
     def _rename(self, path:str) -> None:
-        """Rename a file or folder on disk, and tell the host so open tabs can follow."""
+        """Rename a file or folder on disk, and tell the host so open tabs can follow.
+
+        Returns:
+            None.
+        """
         old = os.path.basename(path)
         name = compat.message.prompt(title="Rename", label="New name:", text=old, parent=self)
         if not name or name == old:
@@ -1680,7 +2076,11 @@ class WorkspacePanel(qt.QWidget):
         self.refresh()
 
     def _delete(self, path:str) -> None:
-        """Delete a file or folder, after asking. There is no undo for this one."""
+        """Delete a file or folder, after asking. There is no undo for this one.
+
+        Returns:
+            None.
+        """
         name = os.path.basename(path)
         folder = os.path.isdir(path)
         count = sum(len(files) for _, _, files in os.walk(path)) if folder else 0
@@ -1723,7 +2123,13 @@ class SearchPanel(qt.QWidget):
     DELAY       = 350                          # ms of quiet before a walk starts
 
     def __init__(self, roots_provider, parent:qt.QWidget=None) -> None:
-        """`roots_provider` is a callable returning the current list of workspace root folders."""
+        """Build the search view: query and replace fields, options and the results tree.
+
+        `roots_provider` is a callable returning the current list of workspace root folders.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._roots = roots_provider
         self.scope = None                # a single folder to search instead of the whole workspace
@@ -1811,24 +2217,41 @@ class SearchPanel(qt.QWidget):
     # ---- replace row
 
     def _toggle_replace(self, on:bool) -> None:
+        """Show or hide the replace row and refresh the toggle chevron.
+
+        Returns:
+            None.
+        """
         for widget in self.replace_row:
             widget.setVisible(on)
         self._refresh_chevron()
 
     def _refresh_chevron(self) -> None:
-        """The same chevron images the tree and the find panel use, not a text arrow."""
+        """The same chevron images the tree and the find panel use, not a text arrow.
+
+        Returns:
+            None.
+        """
         self.toggle.setIcon(_icon("chevron_down.png" if self.toggle.isChecked()
                                   else "chevron_right.png"))
 
     # ---- searching
 
-    def _pattern(self):
-        """The compiled query, or None when it is empty or an invalid regular expression."""
+    def _pattern(self) -> object:
+        """The compiled query, or None when it is empty or an invalid regular expression.
+
+        Returns:
+            object: the compiled query, or None when empty or an invalid regex.
+        """
         return find.compiled_query(self.field.edit.text(), regex=self.regex.isChecked(),
                                    word=self.word.isChecked(), case=self.case.isChecked())
 
-    def _walk(self):
-        """Every file under the current scope: the workspace roots, or one folder."""
+    def _walk(self) -> None:
+        """Every file under the current scope: the workspace roots, or one folder.
+
+        Returns:
+            None.
+        """
         for root in ([self.scope] if self.scope else (self._roots() or [])):
             for folder, dirs, names in os.walk(root):
                 dirs[:] = [d for d in dirs if d not in self.SKIP_DIRS]
@@ -1836,7 +2259,11 @@ class SearchPanel(qt.QWidget):
                     yield root, os.path.join(folder, name)
 
     def run_search(self) -> None:
-        """Walk the scope and list every line matching the query."""
+        """Walk the scope and list every line matching the query.
+
+        Returns:
+            None.
+        """
         self.results.clear()
         pattern = self._pattern()
         if pattern is None:
@@ -1878,16 +2305,24 @@ class SearchPanel(qt.QWidget):
 
     # ---- replacing
 
-    def _replacer(self, replacement:str):
+    def _replacer(self, replacement:str) -> object:
         """The substitution callable, honouring the AB (Preserve Case) toggle.
 
         Off, the text goes in verbatim. On, each hit keeps the casing it had - so replacing `node`
         with `joint` turns `Node` into `Joint` and `NODE` into `JOINT` in the same pass.
+
+        Returns:
+            object: the substitution callable passed to re.sub.
         """
         if not self.preserve.isChecked():
             return lambda match: replacement
 
-        def cased(match):
+        def cased(match) -> object:
+            """Return the replacement cased to match the text that was found.
+
+            Returns:
+                object: the replacement in the matched text's case.
+            """
             found = match.group()
             if found.isupper():
                 return replacement.upper()
@@ -1902,6 +2337,9 @@ class SearchPanel(qt.QWidget):
 
         The files go through session.write_atomic: a replace that fails midway must not leave a
         source truncated, and nothing here can be undone once dozens of files have been rewritten.
+
+        Returns:
+            None.
         """
         pattern = self._pattern()
         if pattern is None:
@@ -1946,6 +2384,11 @@ class SearchPanel(qt.QWidget):
         self.run_search()
 
     def _activate(self, item, column=0) -> None:
+        """Emit resultActivated for the file and line of the clicked result.
+
+        Returns:
+            None.
+        """
         path = item.data(0, _PATH_ROLE)
         if path:
             self.resultActivated.emit(path, int(item.data(0, _LINE_ROLE) or 1))
@@ -1959,12 +2402,22 @@ class GraphDelegate(qt.QStyledItemDelegate):
     MUTED  = "#6a6f75"
     RAIL_X = 10                # design-space centre of the rail
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option, index) -> object:
+        """Force a minimum row height of 22px.
+
+        Returns:
+            object: the item size hint, raised to at least 22px tall.
+        """
         size = super().sizeHint(option, index)
         size.setHeight(max(size.height(), qt.px(22)))
         return size
 
-    def paint(self, painter, option, index):
+    def paint(self, painter, option, index) -> None:
+        """Paint one commit row: the graph rail and node, ref pills, author and subject.
+
+        Returns:
+            None.
+        """
         painter.save()
         painter.setRenderHint(qt.QPainter.Antialiasing, True)
         rect = qt.QRect(option.rect)
@@ -2037,6 +2490,11 @@ class GraphPanel(qt.QWidget):
     LIMIT = 60
 
     def __init__(self, roots_provider, parent:qt.QWidget=None) -> None:
+        """Build the graph panel: a commit list view painted by the graph delegate.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._roots = roots_provider
         self.setObjectName("codeGraph")
@@ -2053,7 +2511,11 @@ class GraphPanel(qt.QWidget):
         layout.addWidget(self.commits, 1)
 
     def refresh(self) -> None:
-        """Re-read the log of the first repository among the workspace roots."""
+        """Re-read the log of the first repository among the workspace roots.
+
+        Returns:
+            None.
+        """
         self.commits.clear()
         for root in (self._roots() or []):
             try:
@@ -2073,8 +2535,17 @@ class GraphPanel(qt.QWidget):
 
     @staticmethod
     def _tooltip(commit:dict) -> str:
-        """Rich hover card for a commit: subject, refs, author, date, then the full body."""
-        def escape(text):
+        """Rich hover card for a commit: subject, refs, author, date, then the full body.
+
+        Returns:
+            str: the HTML hover card for the commit.
+        """
+        def escape(text) -> object:
+            """HTML-escape `text`.
+
+            Returns:
+                object: the HTML-escaped text.
+            """
             return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         lines = ["<div style='max-width:560px'>",
@@ -2113,16 +2584,31 @@ class SourceControlDelegate(qt.QStyledItemDelegate):
     MUTED       = "#6a6f75"
     TEXT        = "#cccccc"
 
-    def __init__(self, tree, parent=None):
+    def __init__(self, tree, parent=None) -> None:
+        """Store the tree reference used to compute the indent guide lines.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._tree = tree                    # needed for indentation() when drawing the guide lines
 
-    def sizeHint(self, option, index):
+    def sizeHint(self, option, index) -> object:
+        """Force a minimum row height of 24px.
+
+        Returns:
+            object: the item size hint, raised to at least 24px tall.
+        """
         size = super().sizeHint(option, index)
         size.setHeight(max(size.height(), qt.px(24)))
         return size
 
-    def paint(self, painter, option, index):
+    def paint(self, painter, option, index) -> None:
+        """Paint one source-control row: a group header with count bubble, or a file row.
+
+        Returns:
+            None.
+        """
         painter.save()
         rect = qt.QRect(option.rect)
         selected = bool(option.state & qt.QStyle.State_Selected)
@@ -2284,6 +2770,11 @@ class SourceControlPanel(qt.QWidget):
     diffRequested = qt.signal(str, str, bool, bool)  # path, root, staged?, preview?
 
     def __init__(self, roots_provider, parent:qt.QWidget=None) -> None:
+        """Build the source-control view: a Changes tree and a Graph section in a splitter.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._roots = roots_provider
         self.setObjectName("codeScm")
@@ -2313,7 +2804,11 @@ class SourceControlPanel(qt.QWidget):
         self._layout.addStretch(0)      # takes the slack once every section is collapsed
 
     def refresh(self) -> None:
-        """Re-query git and rebuild the change list, split into staged and unstaged like VS Code."""
+        """Re-query git and rebuild the change list, split into staged and unstaged like VS Code.
+
+        Returns:
+            None.
+        """
         self.graph.refresh()
         self.changes.clear()
         total = 0
@@ -2356,7 +2851,11 @@ class SourceControlPanel(qt.QWidget):
         self.countChanged.emit(total)
 
     def _activate(self, item, column=0, preview:bool=True) -> None:
-        """A file row opens its diff (preview on single click, pinned on double); groups just fold."""
+        """A file row opens its diff (preview on single click, pinned on double); groups just fold.
+
+        Returns:
+            None.
+        """
         path = item.data(0, _PATH_ROLE)
         if not path:
             item.setExpanded(not item.isExpanded())
@@ -2373,6 +2872,11 @@ class ActivityBar(qt.QWidget):
     WIDTH = 48
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the activity bar: the view toggle buttons and the bottom gear.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeActivityBar")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -2418,7 +2922,11 @@ class ActivityBar(qt.QWidget):
         self.select("explorer")
 
     def select(self, name:str) -> None:
-        """Activate `name`, refresh every icon, and announce the change."""
+        """Activate `name`, refresh every icon, and announce the change.
+
+        Returns:
+            None.
+        """
         for key, (button, base) in self._buttons.items():
             active = key == name
             button.setChecked(active)
@@ -2426,13 +2934,22 @@ class ActivityBar(qt.QWidget):
         self.viewChanged.emit(name)
 
     def current(self) -> str:
+        """The name of the currently selected view.
+
+        Returns:
+            str: the checked view's name, or 'explorer' when none is checked.
+        """
         for key, (button, _) in self._buttons.items():
             if button.isChecked():
                 return key
         return "explorer"
 
     def set_badge(self, name:str, count:int) -> None:
-        """Show a small count bubble on a view's icon (VS Code's source-control badge). 0 hides it."""
+        """Show a small count bubble on a view's icon (VS Code's source-control badge). 0 hides it.
+
+        Returns:
+            None.
+        """
         entry = self._buttons.get(name)
         if not entry:
             return
@@ -2473,6 +2990,11 @@ class Sidebar(qt.QWidget):
     pathDeleted      = qt.signal(str)
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the sidebar: the Explorer, Search and Source Control views in a stack.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeSidebar")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -2566,7 +3088,11 @@ class Sidebar(qt.QWidget):
 
     @staticmethod
     def _titled(header, panel) -> qt.QWidget:
-        """Stack a view header over a panel, as one widget for the stacked view."""
+        """Stack a view header over a panel, as one widget for the stacked view.
+
+        Returns:
+            qt.QWidget: the wrapper holding the header above the panel.
+        """
         wrapper = qt.QWidget()
         wrapper.setObjectName("codeSidebarViews")        # same surface as the stack it goes into
         wrapper.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -2578,7 +3104,11 @@ class Sidebar(qt.QWidget):
         return wrapper
 
     def _search_folder(self, folder:str) -> None:
-        """Point the Search view at one folder and bring it forward."""
+        """Point the Search view at one folder and bring it forward.
+
+        Returns:
+            None.
+        """
         self.search.scope = folder
         self.search.field.setPlaceholderText("Search in %s" % os.path.basename(folder.rstrip("/\\")))
         self.show_view("search")
@@ -2586,7 +3116,11 @@ class Sidebar(qt.QWidget):
         self.search.field.selectAll()
 
     def show_view(self, name:str) -> None:
-        """Switch the sidebar to one of the activity-bar views."""
+        """Switch the sidebar to one of the activity-bar views.
+
+        Returns:
+            None.
+        """
         self.views.setCurrentIndex(self._view_index.get(name, 0))
         if name == "search":
             self.search.field.setFocus()
@@ -2594,7 +3128,11 @@ class Sidebar(qt.QWidget):
             self.scm.refresh()
 
     def refresh_vcs(self) -> None:
-        """Re-query git for both the tree markers and the source-control view (kept in step)."""
+        """Re-query git for both the tree markers and the source-control view (kept in step).
+
+        Returns:
+            None.
+        """
         vcs.invalidate()                     # the branch may have moved since the last read
         self.workspace.refresh_git()
         self.scm.refresh()
@@ -2612,6 +3150,11 @@ class PatchPage(qt.QWidget):
     HUNK    = "#1e3a5f"
 
     def __init__(self, title:str, patch:str, path:str=None, parent:qt.QWidget=None) -> None:
+        """Build the read-only patch page showing `patch` under a title header.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.file_path = path
         self._title = title
@@ -2635,10 +3178,19 @@ class PatchPage(qt.QWidget):
         self._tint()
 
     def name(self) -> str:
+        """The tab label of the patch page.
+
+        Returns:
+            str: the patch page's title.
+        """
         return self._title
 
     def _tint(self) -> None:
-        """Colour whole lines by their unified-diff prefix."""
+        """Colour whole lines by their unified-diff prefix.
+
+        Returns:
+            None.
+        """
         selections = []
         document = self.view.document()
         for number in range(document.blockCount()):
@@ -2668,6 +3220,9 @@ def _scope_statements(node) -> list:
     `if`, `try`, `for` and `with` do NOT open a scope in python: a name bound inside them belongs to
     the module or class around them. Reading only `node.body` would miss most of a file's constants,
     since so many of them sit inside a `try: import ...` or an `if` on the maya version.
+
+    Returns:
+        list: the flattened statements of `node`, descending through control flow.
     """
     found = []
     for child in getattr(node, "body", []):
@@ -2684,7 +3239,11 @@ def _scope_statements(node) -> list:
 
 
 def _assigned_names(node) -> list:
-    """The names an assignment statement binds, tuple targets unpacked."""
+    """The names an assignment statement binds, tuple targets unpacked.
+
+    Returns:
+        list: the names the assignment binds, with tuple targets unpacked.
+    """
     names = []
     if isinstance(node, ast.Assign):
         targets = node.targets
@@ -2714,6 +3273,11 @@ class OpenEditorsPanel(qt.QWidget):
     MUTED = "#6a6f75"
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the open-editors panel: a single tree listing the open tabs.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeOpenEditors")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -2741,7 +3305,11 @@ class OpenEditorsPanel(qt.QWidget):
         layout.addWidget(self.tree, 1)
 
     def set_editors(self, entries:list, current:int) -> None:
-        """`entries` is [(index, icon, name, folder, modified, preview)] in tab order."""
+        """`entries` is [(index, icon, name, folder, modified, preview)] in tab order.
+
+        Returns:
+            None.
+        """
         self.tree.clear()
         for index, icon, name, folder, modified, preview in entries:
             item = qt.QTreeWidgetItem(self.tree, [("● " + name) if modified else name])
@@ -2758,18 +3326,32 @@ class OpenEditorsPanel(qt.QWidget):
                 self.tree.setCurrentItem(item)
 
     def _index(self, item) -> int:
+        """The tab index stored on `item`.
+
+        Returns:
+            int: the item's tab index, or -1 when it carries none.
+        """
         value = item.data(0, _LINE_ROLE) if item is not None else None
         return int(value) if value is not None else -1
 
     CLOSE_SLOT = 16                            # must match the slot SourceControlDelegate reserves
 
     def _activate(self, item, column=0) -> None:
+        """Bring the clicked editor's tab forward.
+
+        Returns:
+            None.
+        """
         index = self._index(item)
         if index >= 0:
             self.editorActivated.emit(index)
 
-    def eventFilter(self, watched, event):
-        """Close on a middle click anywhere, or a left click inside the row's close slot."""
+    def eventFilter(self, watched, event) -> object:
+        """Close on a middle click anywhere, or a left click inside the row's close slot.
+
+        Returns:
+            object: True when the click was consumed, otherwise the base result.
+        """
         if watched is self.tree.viewport() and event.type() == qt.QEvent.MouseButtonRelease:
             index = self._index(self.tree.itemAt(event.pos()))
             if index < 0:
@@ -2788,11 +3370,19 @@ class OpenEditorsPanel(qt.QWidget):
         The height is asked for rather than imposed: the section holding this panel carries a Fixed
         policy, so Qt reads this hint and re-reads it whenever the list changes. With nothing open it
         asks for NOTHING, and only the OPEN EDITORS header remains.
+
+        Returns:
+            qt.QSize: a size holding one row per open editor, capped at nine rows.
         """
         rows = min(self.tree.topLevelItemCount(), 9)
         return qt.QSize(super().sizeHint().width(), rows * qt.px(22) + (qt.px(6) if rows else 0))
 
     def _context_menu(self, pos) -> None:
+        """Show the Close / Close Others / Close All menu for the clicked row.
+
+        Returns:
+            None.
+        """
         index = self._index(self.tree.itemAt(pos))
         menu = qt.QMenu(self.tree)
         if index >= 0:
@@ -2814,6 +3404,11 @@ class OutlinePanel(qt.QWidget):
     MUTED = "#6a6f75"
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the outline panel: a tree of the current file's symbols.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeOutline")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -2834,7 +3429,11 @@ class OutlinePanel(qt.QWidget):
         layout.addWidget(self.tree, 1)
 
     def set_source(self, path:str, source:str) -> None:
-        """Rebuild from `source`. Anything that is not python gets an honest placeholder."""
+        """Rebuild from `source`. Anything that is not python gets an honest placeholder.
+
+        Returns:
+            None.
+        """
         self.tree.clear()
         self._lines = []
         if not path:
@@ -2846,7 +3445,12 @@ class OutlinePanel(qt.QWidget):
         except SyntaxError as error:
             return self._hint("line %s: %s" % (error.lineno, error.msg))
 
-        def add(parent, name, kind, line):
+        def add(parent, name, kind, line) -> object:
+            """Add a symbol row under `parent` and remember its source line.
+
+            Returns:
+                object: the created tree item.
+            """
             item = qt.QTreeWidgetItem(parent, [name])
             item.setIcon(0, symbol_icon(kind))
             item.setData(0, _LINE_ROLE, line)
@@ -2854,7 +3458,12 @@ class OutlinePanel(qt.QWidget):
             self._lines.append((line, item))
             return item
 
-        def walk(node, parent, in_function=False):
+        def walk(node, parent, in_function=False) -> None:
+            """Recurse the AST, adding a row per class, function and top-level name.
+
+            Returns:
+                None.
+            """
             seen = set()
             for child in _scope_statements(node):
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
@@ -2875,11 +3484,20 @@ class OutlinePanel(qt.QWidget):
             self._hint("No symbols in this file.")
 
     def _hint(self, text:str) -> None:
+        """Show a single dim placeholder row carrying `text`.
+
+        Returns:
+            None.
+        """
         item = qt.QTreeWidgetItem(self.tree, [text])
         item.setForeground(0, qt.QColor(self.MUTED))
 
     def follow(self, line:int) -> None:
-        """Highlight the symbol the caret sits in - the LAST one starting at or before `line`."""
+        """Highlight the symbol the caret sits in - the LAST one starting at or before `line`.
+
+        Returns:
+            None.
+        """
         current = None
         for start, item in self._lines:
             if start <= line:
@@ -2890,6 +3508,11 @@ class OutlinePanel(qt.QWidget):
             self.tree.setCurrentItem(current)
 
     def _activate(self, item, column=0) -> None:
+        """Jump to the line of the clicked symbol.
+
+        Returns:
+            None.
+        """
         line = item.data(0, _LINE_ROLE)
         if line:
             self.symbolActivated.emit(int(line))
@@ -2903,6 +3526,9 @@ def gear_icon() -> "qt.QIcon":
 
     The package has no cog asset, and the activity bar's other icons are PNGs of a fixed colour -
     drawing this one keeps it the same tone as the theme's dim foreground on both skins.
+
+    Returns:
+        'qt.QIcon': the cached cog icon.
     """
     if _GEAR_CACHE:
         return _GEAR_CACHE[0]
@@ -2944,6 +3570,9 @@ def severity_glyph(kind:str, colour:str) -> "qt.QIcon":
 
     The inner mark is CUT OUT rather than painted: a hole shows whatever surface the icon sits on,
     so one drawing works on both themes without being told the background.
+
+    Returns:
+        'qt.QIcon': the cached error/warning icon in `colour`.
     """
     key = (kind, colour)
     if key in _SEVERITY_CACHE:
@@ -2992,7 +3621,11 @@ _COMMIT_CACHE = []
 
 
 def commit_icon() -> "qt.QIcon":
-    """The little git-commit glyph: a ring on a vertical rail, as VS Code draws it."""
+    """The little git-commit glyph: a ring on a vertical rail, as VS Code draws it.
+
+    Returns:
+        'qt.QIcon': the cached git-commit icon.
+    """
     if _COMMIT_CACHE:
         return _COMMIT_CACHE[0]
     size = qt.px(16)
@@ -3014,7 +3647,11 @@ def commit_icon() -> "qt.QIcon":
 
 
 def _short_age(relative:str) -> str:
-    """git's "2 weeks ago" as the compact "2 wks" VS Code shows on the right of a timeline row."""
+    """git's "2 weeks ago" as the compact "2 wks" VS Code shows on the right of a timeline row.
+
+    Returns:
+        str: the compact age string, e.g. '2 wks'.
+    """
     units = {"second": "sec", "minute": "min", "hour": "hr", "day": "day",
              "week": "wk", "month": "mo", "year": "yr"}
     parts = (relative or "").split()
@@ -3042,6 +3679,11 @@ class TimelinePanel(qt.QWidget):
     LIMIT = 40
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the timeline panel: a tree of the current file's commit history.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeTimeline")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -3064,7 +3706,11 @@ class TimelinePanel(qt.QWidget):
         layout.addWidget(self.tree, 1)
 
     def set_file(self, path:str) -> None:
-        """Load the commits that touched `path`, newest first."""
+        """Load the commits that touched `path`, newest first.
+
+        Returns:
+            None.
+        """
         self.tree.clear()
         self._path = path or ""
         if not path or not os.path.isfile(path):
@@ -3097,8 +3743,16 @@ class TimelinePanel(qt.QWidget):
         Plain text in a Qt tooltip is never wrapped: a commit body becomes one line running off the
         screen, which is exactly what made it unreadable. Any markup switches the tooltip to rich
         text, where it word-wraps - so the card is built as html, with the width set explicitly.
+
+        Returns:
+            str: the HTML hover card for the commit.
         """
-        def escape(value):
+        def escape(value) -> object:
+            """HTML-escape `value`.
+
+            Returns:
+                object: the HTML-escaped value.
+            """
             return (value or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
         parts = ["<div style='width:420px'>",
@@ -3113,7 +3767,11 @@ class TimelinePanel(qt.QWidget):
         return "".join(parts)
 
     def _context_menu(self, pos) -> None:
-        """Right-click a revision: see it, compare it, copy it, open it on GitHub."""
+        """Right-click a revision: see it, compare it, copy it, open it on GitHub.
+
+        Returns:
+            None.
+        """
         item = self.tree.itemAt(pos)
         sha = item.data(0, _PATH_ROLE) if item is not None else None
         if not sha:
@@ -3135,10 +3793,20 @@ class TimelinePanel(qt.QWidget):
         menu.exec_(point) if hasattr(menu, "exec_") else menu.exec(point)
 
     def _hint(self, text:str) -> None:
+        """Show a single dim placeholder row carrying `text`.
+
+        Returns:
+            None.
+        """
         item = qt.QTreeWidgetItem(self.tree, [text])
         item.setForeground(0, qt.QColor(self.MUTED))
 
     def _activate(self, item, column=0) -> None:
+        """Open the diff for the clicked revision.
+
+        Returns:
+            None.
+        """
         sha = item.data(0, _PATH_ROLE)
         if sha:
             self.revisionActivated.emit(self._path, item.data(0, _ROOT_ROLE) or "", sha)
@@ -3164,6 +3832,11 @@ class HelpRowDelegate(qt.QStyledItemDelegate):
     """
 
     def paint(self, painter, option, index) -> None:
+        """Paint one Quick Help cell's row band and its reassembled outline.
+
+        Returns:
+            None.
+        """
         selected = bool(option.state & qt.QStyle.State_Selected)
         hovered = bool(option.state & qt.QStyle.State_MouseOver)
         rect = option.rect
@@ -3200,6 +3873,11 @@ class BusySpinner(qt.QWidget):
     """
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Set up the hidden spinner widget and its rotation timer.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeSpinner")
         self._angle = 0
@@ -3210,18 +3888,38 @@ class BusySpinner(qt.QWidget):
         self.hide()
 
     def start(self) -> None:
+        """Show the spinner and start its rotation timer.
+
+        Returns:
+            None.
+        """
         self.show()
         self._timer.start()
 
     def stop(self) -> None:
+        """Stop the rotation timer and hide the spinner.
+
+        Returns:
+            None.
+        """
         self._timer.stop()
         self.hide()
 
     def _step(self) -> None:
+        """Advance the rotation angle by one step and repaint.
+
+        Returns:
+            None.
+        """
         self._angle = (self._angle + 30) % 360
         self.update()
 
     def paintEvent(self, event) -> None:
+        """Draw the rotating three-quarter arc.
+
+        Returns:
+            None.
+        """
         painter = qt.QPainter(self)
         painter.setRenderHint(qt.QPainter.Antialiasing, True)
         pen = qt.QPen(qt.QColor(qt.theme()["accent_on"]), max(1, qt.px(2)))
@@ -3250,6 +3948,11 @@ class StatusBar(qt.QWidget):
                                                # exactly as VS Code renders them in this strip
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the status bar: branch, problem tallies and the file-info fields.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeStatus")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -3302,11 +4005,18 @@ class StatusBar(qt.QWidget):
         Ten fields side by side (branch, tallies, position, indentation, encoding, EOL, language,
         runtime) add up to several hundred pixels of minimum. The fields on the right clip away
         instead; the ones that matter sit on the left.
+
+        Returns:
+            qt.QSize: a size with zero width and the layout's own minimum height.
         """
         return qt.QSize(0, super().minimumSizeHint().height())
 
     def set_busy(self, busy:bool, text:str="") -> None:
-        """Spin, with a word for what is going on. Stopping clears the word too."""
+        """Spin, with a word for what is going on. Stopping clears the word too.
+
+        Returns:
+            None.
+        """
         self.spinner.start() if busy else self.spinner.stop()
         self.message.setText(text or "")
         self.message.setVisible(bool(text))
@@ -3314,7 +4024,11 @@ class StatusBar(qt.QWidget):
             self._message_timer.stop()
 
     def set_message(self, text:str="", seconds:int=5) -> None:
-        """Show a transient notice in the status bar, then let it fade out of the way."""
+        """Show a transient notice in the status bar, then let it fade out of the way.
+
+        Returns:
+            None.
+        """
         self.message.setText(text or "")
         self.message.setVisible(bool(text))
         self._message_timer.stop()
@@ -3322,6 +4036,11 @@ class StatusBar(qt.QWidget):
             self._message_timer.start(max(1, seconds) * 1000)
 
     def _field(self, text:str, tip:str, signal=None) -> qt.QToolButton:
+        """Build a status-bar field button, made clickable when `signal` is given.
+
+        Returns:
+            qt.QToolButton: the configured status-bar field button.
+        """
         button = qt.QToolButton()
         button.setObjectName("codeStatusField")
         button.setText(text)
@@ -3341,6 +4060,9 @@ class StatusBar(qt.QWidget):
 
         The branch lives in set_branch instead, because it depends on the folder rather than the
         text - and this runs again on every pause in typing.
+
+        Returns:
+            None.
         """
         name = os.path.splitext(path or "")[1].lower()
         self.language.setText(_LANGUAGES.get(name, name.lstrip(".").upper() or "Plain Text"))
@@ -3354,6 +4076,9 @@ class StatusBar(qt.QWidget):
 
         Separate from set_file because it depends on the FOLDER, not on the text - and set_file runs
         again on every pause in typing, where two process spawns are not affordable.
+
+        Returns:
+            None.
         """
         try:
             branch = vcs.branch_cached(vcs.repo_root_cached(folder)) if folder else ""
@@ -3363,9 +4088,19 @@ class StatusBar(qt.QWidget):
         self.branch.setVisible(bool(branch))
 
     def set_position(self, line:int, column:int) -> None:
+        """Update the line and column field.
+
+        Returns:
+            None.
+        """
         self.position.setText("Ln %d, Col %d" % (line, column))
 
     def set_tally(self, errors:int, warnings:int) -> None:
+        """Update the error and warning count fields.
+
+        Returns:
+            None.
+        """
         self.errors.setText(str(errors))
         self.warnings.setText(str(warnings))
 
@@ -3381,6 +4116,11 @@ class SecondaryPanel(qt.QWidget):
     argumentPicked = qt.signal(str)        # a row was double-clicked: insert it into the call
 
     def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the Quick Help panel: the title, the parameter table and the doc view.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.setObjectName("codeSecondary")
         self.setAttribute(qt.Qt.WA_StyledBackground, True)
@@ -3431,7 +4171,11 @@ class SecondaryPanel(qt.QWidget):
         self.clear()
 
     def clear(self) -> None:
-        """Empty the panel. Nothing is written in its place - an idle panel should be quiet."""
+        """Empty the panel. Nothing is written in its place - an idle panel should be quiet.
+
+        Returns:
+            None.
+        """
         self._showing = None
         self.title.setText("")
         self.title.setVisible(False)
@@ -3441,14 +4185,22 @@ class SecondaryPanel(qt.QWidget):
 
     @staticmethod
     def _syntax(role:str, fallback:str) -> str:
-        """A colour from the python highlighter, so the title reads like the code it describes."""
+        """A colour from the python highlighter, so the title reads like the code it describes.
+
+        Returns:
+            str: the highlighter colour for `role`, or `fallback` on failure.
+        """
         try:
             return editor_module.python_syntax_styles(role).foreground().color().name()
         except Exception:
             return fallback
 
     def _title_html(self, name:str, returns:str) -> str:
-        """`cmds.circle() -> string[]`, coloured the way the editor would colour it."""
+        """`cmds.circle() -> string[]`, coloured the way the editor would colour it.
+
+        Returns:
+            str: the coloured HTML for the call signature.
+        """
         prefix, _, call = name.rpartition(".")
         palette = qt.theme()
         method = self._syntax("method", "#dcdcaa")
@@ -3467,23 +4219,40 @@ class SecondaryPanel(qt.QWidget):
         return html
 
     def _picked(self, item, column=0) -> None:
-        """Double-click: hand the name back so the editor can type it into the call."""
+        """Double-click: hand the name back so the editor can type it into the call.
+
+        Returns:
+            None.
+        """
         if item is not None and item.data(0, _PATH_ROLE):
             self.argumentPicked.emit(item.data(0, _PATH_ROLE))
 
     def _row_changed(self, current, _previous=None) -> None:
-        """Show the selected argument's own description, falling back to the whole docstring."""
+        """Show the selected argument's own description, falling back to the whole docstring.
+
+        Returns:
+            None.
+        """
         note = current.data(0, _SUBTITLE_ROLE) if current is not None else ""
         self._render_doc(note or self._doc)
 
     def _render_doc(self, text:str) -> None:
+        """Render `text` as the dim, word-wrapped documentation body.
+
+        Returns:
+            None.
+        """
         palette = qt.theme()
         body = self._escape((text or "").strip()[:1400])
         self.view.setHtml("<div style='color:%s;font-size:11px;padding:6px 8px;"
                           "white-space:pre-wrap'>%s</div>" % (palette["dim"], body))
 
     def set_call(self, name:str, info:dict, argument:int, palette:dict) -> None:
-        """Show `info` for the call `name`, with parameter number `argument` marked."""
+        """Show `info` for the call `name`, with parameter number `argument` marked.
+
+        Returns:
+            None.
+        """
         if not info:
             self.clear()
             return
@@ -3521,6 +4290,11 @@ class SecondaryPanel(qt.QWidget):
 
     @staticmethod
     def _escape(text:str) -> str:
+        """HTML-escape `text`.
+
+        Returns:
+            str: the HTML-escaped text.
+        """
         return (text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
@@ -3537,7 +4311,13 @@ class ProblemsPanel(qt.QWidget):
     MUTED            = "#6a6f75"                # the "no problems" placeholder
 
     def __init__(self, tabs_provider, parent:qt.QWidget=None) -> None:
-        """`tabs_provider` returns the list of (path, source) pairs to check."""
+        """Build the problems panel: a tree grouping problems per file.
+
+        `tabs_provider` returns the list of (path, source) pairs to check.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self._tabs = tabs_provider
         self.setObjectName("codeProblems")
@@ -3566,7 +4346,11 @@ class ProblemsPanel(qt.QWidget):
         copy.activated.connect(self._copy_selected)
 
     def _copy_selected(self) -> None:
-        """Ctrl+C in the list: the selected problem, in the same one-line form as Copy."""
+        """Ctrl+C in the list: the selected problem, in the same one-line form as Copy.
+
+        Returns:
+            None.
+        """
         item = self.tree.currentItem()
         if item is not None:
             self._copy(item.data(0, _DETAIL_ROLE) or item.text(0))
@@ -3577,6 +4361,9 @@ class ProblemsPanel(qt.QWidget):
         Its Fix / Explain / "suppress this warning" entries belong to Pylance and Copilot, which are
         not here - offering them would open a dialog that could not do anything. What is left is what
         actually works: go there, and copy.
+
+        Returns:
+            None.
         """
         item = self.tree.itemAt(position)
         menu = qt.QMenu(self.tree)
@@ -3607,7 +4394,11 @@ class ProblemsPanel(qt.QWidget):
         menu.exec_(point) if hasattr(menu, "exec_") else menu.exec(point)
 
     def _all_details(self) -> str:
-        """Every problem currently listed, one per line."""
+        """Every problem currently listed, one per line.
+
+        Returns:
+            str: every listed problem, one per line.
+        """
         lines = []
         for row in range(self.tree.topLevelItemCount()):
             parent = self.tree.topLevelItem(row)
@@ -3618,12 +4409,20 @@ class ProblemsPanel(qt.QWidget):
         return "\n".join(lines)
 
     def _copy(self, text:str) -> None:
-        """Put `text` on the clipboard."""
+        """Put `text` on the clipboard.
+
+        Returns:
+            None.
+        """
         if text:
             qt.QApplication.clipboard().setText(text)
 
     def refresh(self) -> int:
-        """Re-analyse every open python tab and rebuild the tree. Returns the problem count."""
+        """Re-analyse every open python tab and rebuild the tree. Returns the problem count.
+
+        Returns:
+            int: the total number of problems found.
+        """
         self.tree.clear()
         found = errors = 0
         for path, source in (self._tabs() or []):
@@ -3663,6 +4462,11 @@ class ProblemsPanel(qt.QWidget):
         return found
 
     def _activate(self, item, column=0) -> None:
+        """Jump to the clicked problem, or fold a file header.
+
+        Returns:
+            None.
+        """
         path = item.data(0, _PATH_ROLE)
         if path:
             self.problemActivated.emit(path, int(item.data(0, _LINE_ROLE) or 1))
@@ -3678,6 +4482,11 @@ class DebugConsole(qt.QWidget):
     """
 
     def __init__(self, namespace:dict, parent:qt.QWidget=None) -> None:
+        """Build the debug console: a read-only output view over an input prompt.
+
+        Returns:
+            None.
+        """
         super().__init__(parent)
         self.namespace = namespace
         self._history = []
@@ -3703,8 +4512,12 @@ class DebugConsole(qt.QWidget):
         self.prompt.installEventFilter(self)
         layout.addWidget(self.prompt, 0)
 
-    def eventFilter(self, watched, event):
-        """Up/Down walk the command history, like a real prompt."""
+    def eventFilter(self, watched, event) -> object:
+        """Up/Down walk the command history, like a real prompt.
+
+        Returns:
+            object: True when an Up/Down history key was handled, else the base result.
+        """
         if watched is self.prompt and event.type() == qt.QEvent.KeyPress and self._history:
             key = event.key()
             if key == qt.Qt.Key_Up:
@@ -3719,6 +4532,11 @@ class DebugConsole(qt.QWidget):
         return super().eventFilter(watched, event)
 
     def _append(self, text:str, colour:str) -> None:
+        """Append `text` to the output view in `colour`.
+
+        Returns:
+            None.
+        """
         cursor = self.view.textCursor()
         cursor.movePosition(qt.QTextCursor.End)
         char_format = qt.QTextCharFormat()
@@ -3727,7 +4545,11 @@ class DebugConsole(qt.QWidget):
         self.view.setTextCursor(cursor)
 
     def _run(self) -> None:
-        """Evaluate the line as an expression, falling back to a statement."""
+        """Evaluate the line as an expression, falling back to a statement.
+
+        Returns:
+            None.
+        """
         import io
         import contextlib
         import traceback
@@ -3767,8 +4589,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     sessionStored = qt.signal(object)      # the layout that was just written, for embedders to mirror
 
-    def __init__(self, parent:qt.QWidget=None, chrome:bool=True, session_name:str="standalone",
-                 session_folder:str=None, session_enabled:bool=True, **kwargs) -> None:
+    def __init__(self, parent:qt.QWidget=None, chrome:bool=True, session_name:str="standalone", session_folder:str=None, session_enabled:bool=True, **kwargs) -> None:
         """Build the editor.
 
         Args:
@@ -3781,6 +4602,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             session_enabled:(bool):    - False remembers nothing until a store is set later. An
                                          embedded editor starts this way: it has no project yet, and
                                          must not restore (nor write) the per-user state meanwhile.
+
+        Returns:
+            None.
         """
         super().__init__(parent=parent)
 
@@ -3864,6 +4688,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._history_at = -1
         self._last_edit = None                       # where the last edit happened
         self._closed = []                            # (path, line) of closed tabs, for Reopen Closed
+        self._page_cache = {}                        # norm-path -> (EditorPage, mtime): a closed tab is kept
+        self._page_cache_order = []                  # alive (hidden) so its native undo/redo survives a
+        #                                              close+reopen, VS Code style; bounded LRU, see _cache_page
         # early: the tab callbacks built below already record into it
         self._session = session.Session(session_name, session_folder, session_enabled)
         preview_bar = PreviewTabBar()
@@ -4080,12 +4907,20 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ------------------------------------------------------------------ tabs
 
     def current_page(self) -> "EditorPage":
-        """The active EditorPage, or None."""
+        """The active EditorPage, or None.
+
+        Returns:
+            'EditorPage': the current EditorPage, or None when the active tab is not one.
+        """
         w = self.tabs.currentWidget()
         return w if isinstance(w, EditorPage) else None
 
     def _show_welcome_if_empty(self) -> None:
-        """Show the welcome page when no tab is open, the tabs otherwise."""
+        """Show the welcome page when no tab is open, the tabs otherwise.
+
+        Returns:
+            None.
+        """
         self.stack.setCurrentIndex(1 if self.tabs.count() else 0)
 
     def _new_editor_page(self, path:str=None) -> "EditorPage":
@@ -4093,6 +4928,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         One place to do it, so a page built by New File, by an open, or by a session restore all behave
         the same: dirty marker, preview pinning, problems re-analysis and session bookkeeping.
+
+        Returns:
+            'EditorPage': the newly built, fully-wired page.
         """
         page = EditorPage(file_path=path, namespace=self.namespace, surface=self.theme["editor"],
                           palette=self.theme)
@@ -4119,7 +4957,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         return page
 
     def new_file(self) -> None:
-        """Open a fresh untitled tab."""
+        """Open a fresh untitled tab.
+
+        Returns:
+            None.
+        """
         page = self._new_editor_page()
         index = self.tabs.addTab(page, page.name())
         self.tabs.setCurrentIndex(index)
@@ -4131,6 +4973,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         `preview` reproduces VS Code's single-click behaviour: the tab title is italic and the NEXT
         preview reuses that same slot. Opening the same file without preview pins it for good.
+
+        Returns:
+            None.
         """
         if not path:
             path = compat.message.file(title="Open File", filter="Python/MEL (*.py *.mel);;All Files (*.*)", parent=self)
@@ -4154,10 +4999,16 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             return
 
         self._remember(path)
-        self._place_tab(self._new_editor_page(path), file_icon(path), os.path.basename(path), preview)
+        # reuse the page kept alive when this file's tab was closed, so its undo/redo history comes back
+        page = self._take_cached_page(path) or self._new_editor_page(path)
+        self._place_tab(page, file_icon(path), os.path.basename(path), preview)
 
     def _place_tab(self, page, icon, label:str, preview:bool) -> int:
-        """Add `page` as a tab, reusing the preview slot when `preview` is set. Returns its index."""
+        """Add `page` as a tab, reusing the preview slot when `preview` is set. Returns its index.
+
+        Returns:
+            int: the index of the placed tab.
+        """
         stale = self._preview_page if preview else None
         slot = self.tabs.indexOf(stale) if stale is not None else -1
         if slot >= 0:
@@ -4180,6 +5031,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         textChanged also fires for things the user did not type - a highlighter re-running, an encoding
         fallback - so the document's modified flag is what decides: syntax highlighting preserves it.
+
+        Returns:
+            None.
         """
         if self._preview_page is page and page.is_modified():
             self._preview_page = None
@@ -4187,7 +5041,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self._touch_session()
 
     def save_file(self) -> None:
-        """Save the current tab (Save As when untitled)."""
+        """Save the current tab (Save As when untitled).
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -4217,10 +5075,18 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         busy indicator moves instead of sitting frozen.
 
         A step that raises does not strand the indicator: the chain carries on and `done` still runs.
+
+        Returns:
+            None.
         """
         queue = [step for step in steps if step is not None]
 
-        def pump():
+        def pump() -> None:
+            """Pump.
+
+            Returns:
+                None.
+            """
             if not self._alive():
                 return
             if not queue:
@@ -4237,7 +5103,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         qt.QTimer.singleShot(0, pump)
 
     def save_file_as(self) -> None:
-        """Save the current tab under a chosen path."""
+        """Save the current tab under a chosen path.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -4260,7 +5130,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     RECENT_MAX = 12
 
     def _remember(self, path:str) -> None:
-        """Push `path` to the front of the recent list, without duplicates."""
+        """Push `path` to the front of the recent list, without duplicates.
+
+        Returns:
+            None.
+        """
         if not path:
             return
         target = os.path.normpath(path)
@@ -4274,6 +5148,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Prompting for a location per untitled buffer would turn one menu click into a queue of
         dialogs; their content is in the backup either way, so nothing is at risk.
+
+        Returns:
+            None.
         """
         saved = 0
         for index in range(self.tabs.count()):
@@ -4286,7 +5163,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self._store_session()
 
     def revert_file(self) -> None:
-        """Throw away the current tab's edits and reload it from disk."""
+        """Throw away the current tab's edits and reload it from disk.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None or not page.file_path or not os.path.isfile(page.file_path):
             return
@@ -4312,6 +5193,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Off by default on purpose: the editor's whole model is that the file on disk is untouched
         until you ask. Auto Save trades that away for convenience, so it has to be a decision.
+
+        Returns:
+            None.
         """
         self.autosave = bool(on)
         self._touch_session()
@@ -4319,7 +5203,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self.save_all()
 
     def close_all_tabs(self) -> None:
-        """Close every tab, asking about each one that has unsaved changes."""
+        """Close every tab, asking about each one that has unsaved changes.
+
+        Returns:
+            None.
+        """
         while self.tabs.count():
             before = self.tabs.count()
             self.close_tab(self.tabs.count() - 1)
@@ -4327,7 +5215,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                 return                                   # the user cancelled: stop there
 
     def reopen_closed(self) -> None:
-        """Reopen the last tab that was closed, back at the line it was on."""
+        """Reopen the last tab that was closed, back at the line it was on.
+
+        Returns:
+            None.
+        """
         while self._closed:
             path, line = self._closed.pop()
             if path and os.path.isfile(path):
@@ -4337,7 +5229,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                 return
 
     def run_path(self, path:str) -> None:
-        """Open a script and execute it, straight from the explorer's context menu."""
+        """Open a script and execute it, straight from the explorer's context menu.
+
+        Returns:
+            None.
+        """
         if not path or not os.path.isfile(path):
             return
         self.open_file(path, preview=False)
@@ -4346,8 +5242,13 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             page.code.execute(page.code.toPlainText())
 
     def _path_renamed(self, old:str, new:str) -> None:
-        """Follow a rename made in the explorer: retitle the open tab and move its backup."""
+        """Follow a rename made in the explorer: retitle the open tab and move its backup.
+
+        Returns:
+            None.
+        """
         target = os.path.normpath(old)
+        self._drop_cached_page(old)                   # a closed-tab undo cache under the old name is stale now
         for index in range(self.tabs.count()):
             page = self.tabs.widget(index)
             path = getattr(page, "file_path", None)
@@ -4362,8 +5263,19 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._store_session()
 
     def _path_deleted(self, path:str) -> None:
-        """Close the tabs whose file the explorer just removed, without prompting to save it."""
+        """Close the tabs whose file the explorer just removed, without prompting to save it.
+
+        Returns:
+            None.
+        """
         target = os.path.normpath(path)
+        prefix = self._cache_key(path)                # also forget any closed-tab undo cache under it
+        for key in list(self._page_cache_order):
+            if prefix and (key == prefix or key.startswith(prefix + os.sep)):
+                entry = self._page_cache.pop(key, None)
+                self._page_cache_order.remove(key)
+                if entry is not None:
+                    entry[0].deleteLater()
         for index in reversed(range(self.tabs.count())):
             page = self.tabs.widget(index)
             open_path = getattr(page, "file_path", None)
@@ -4380,7 +5292,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._store_session()
 
     def reveal_path(self, path:str) -> None:
-        """Show `path` in the OS file browser."""
+        """Show `path` in the OS file browser.
+
+        Returns:
+            None.
+        """
         if not path or not os.path.exists(path):
             return
         try:
@@ -4394,17 +5310,103 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             pass
 
     def reveal_file(self) -> None:
-        """File > Reveal in File Explorer: the current tab's file."""
+        """File > Reveal in File Explorer: the current tab's file.
+
+        Returns:
+            None.
+        """
         self.reveal_path(getattr(self.tabs.currentWidget(), "file_path", None))
 
     def copy_path(self) -> None:
-        """Put the current file's full path on the clipboard."""
+        """Put the current file's full path on the clipboard.
+
+        Returns:
+            None.
+        """
         path = getattr(self.tabs.currentWidget(), "file_path", None)
         if path:
             compat.copy(os.path.normpath(path))
 
+    PAGE_CACHE_MAX = 25                                # how many closed editors keep their undo history alive
+
+    def _cache_key(self, path:str=None) -> str:
+        """The normalised path used to key the closed-page (undo) cache.
+
+        Returns:
+            str: the normcased, normalised path, or None when no path was given.
+        """
+        return os.path.normcase(os.path.normpath(path)) if path else None
+
+    def _cache_page(self, page) -> bool:
+        """Keep a just-closed EditorPage alive (hidden) so its native undo/redo survives a reopen.
+
+        Only a clean, saved-to-disk page is cached: a modified page the user chose NOT to save must not
+        come back with its discarded edits. Bounded LRU - the oldest cached page is dropped for good.
+        Returns True when the page was taken over (caller must NOT deleteLater it).
+
+        Returns:
+            bool: True when the page was cached and adopted, False otherwise.
+        """
+        key = self._cache_key(getattr(page, "file_path", None))
+        if key is None or not isinstance(page, EditorPage) or page.is_modified():
+            return False
+        try:
+            mtime = os.path.getmtime(page.file_path)
+        except OSError:
+            return False
+        old = self._page_cache.pop(key, None)         # replace any stale entry for the same file
+        if old is not None:
+            old[0].deleteLater()
+        if key in self._page_cache_order:
+            self._page_cache_order.remove(key)
+        page.setParent(self)                          # removeTab orphans it; own it so Qt keeps it alive
+        page.hide()
+        self._page_cache[key] = (page, mtime)
+        self._page_cache_order.append(key)
+        while len(self._page_cache_order) > self.PAGE_CACHE_MAX:
+            evicted = self._page_cache.pop(self._page_cache_order.pop(0), None)
+            if evicted is not None:
+                evicted[0].deleteLater()
+        return True
+
+    def _take_cached_page(self, path:str=None) -> "EditorPage":
+        """Pop the cached EditorPage for `path` when its content still matches disk, else None (dropping a
+
+        Returns:
+            'EditorPage': the cached page still matching disk, or None.
+        stale one). Reusing it restores the exact undo/redo stack it had when the tab was closed."""
+        key = self._cache_key(path)
+        entry = self._page_cache.pop(key, None) if key else None
+        if key in self._page_cache_order:
+            self._page_cache_order.remove(key)
+        if entry is None:
+            return None
+        page, cached_mtime = entry
+        try:
+            current_mtime = os.path.getmtime(path)
+        except OSError:
+            current_mtime = cached_mtime
+        if current_mtime != cached_mtime:             # edited elsewhere since we cached it: undo is stale
+            page.deleteLater()
+            return None
+        return page
+
+    def _drop_cached_page(self, path:str=None) -> None:
+        """Forget (and destroy) any cached page for `path` - used when the file is renamed or deleted.
+
+        Returns:
+            None.
+        """
+        page = self._take_cached_page(path)
+        if page is not None:
+            page.deleteLater()
+
     def close_tab(self, index:int=None) -> None:
-        """Close a tab, prompting if it has unsaved changes."""
+        """Close a tab, prompting if it has unsaved changes.
+
+        Returns:
+            None.
+        """
         page = self.tabs.widget(index)
         if isinstance(page, EditorPage) and page.is_modified():
             answer = compat.message.warning(title="Unsaved Changes", buttons=["Save", "Don't Save", "Cancel"],
@@ -4423,11 +5425,18 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             del self._closed[:-20]                    # a short history is enough, and bounded
         self._session.discard(self._page_key(page))   # closed on purpose: nothing left to recover
         self.tabs.removeTab(index)
+        if not self._cache_page(page):                # kept alive for its undo history, or...
+            page.deleteLater()                        # ...a dirty/untitled page really goes away
         self._show_welcome_if_empty()
         self._refresh_open_editors()
         self._store_session()                         # immediate: a close must not be lost to the delay
 
     def _mark_dirty(self, page:"EditorPage") -> None:
+        """Refresh the tab title and, when auto-save is on, arm its timer.
+
+        Returns:
+            None.
+        """
         self._refresh_tab_title(page)
         if page.file_path:
             self._last_edit = (page.file_path, page.code.textCursor().blockNumber() + 1)
@@ -4435,6 +5444,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self._autosave_timer.start()     # debounced: never a write per keystroke
 
     def _refresh_tab_title(self, page:"EditorPage") -> None:
+        """Update the tab label, adding the dirty dot when the page is modified.
+
+        Returns:
+            None.
+        """
         index = self.tabs.indexOf(page)
         if index >= 0:
             name = page.name()
@@ -4449,6 +5463,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Delegates and the two custom tab bars draw with plain QColor, so no stylesheet reaches them.
         The values are written onto the INSTANCES, never the classes: both editors can be open at
         once, and a class-level write would repaint the other one too.
+
+        Returns:
+            None.
         """
         palette = self.theme
         roles = (("GUIDE_COLOR", "guide"), ("SELECT", "selection"), ("BUBBLE", "selection"),
@@ -4469,7 +5486,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                     setattr(painter, name, palette[key])
 
     def _touch_session(self, *_) -> None:
-        """Ask for a (debounced) session write. Safe before the timer exists, e.g. during a reload."""
+        """Ask for a (debounced) session write. Safe before the timer exists, e.g. during a reload.
+
+        Returns:
+            None.
+        """
         timer = getattr(self, "_session_timer", None)
         if timer is not None and qt.is_valid(timer):
             timer.start()
@@ -4483,7 +5504,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # because the engine is used outside this window too.
 
     def _layout_state(self) -> dict:
-        """The proportions and visibility worth restoring next time."""
+        """The proportions and visibility worth restoring next time.
+
+        Returns:
+            dict: the layout proportions and visibility to restore next time.
+        """
         try:
             return {
                 # position as well as size: reopening in the same place is half of "where I left it"
@@ -4513,6 +5538,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         The side bar's SECTION sizes are deliberately not among them: apply_sizes re-derives that
         stack on every toggle and every resize, so a stored set would be overwritten moments after
         being applied - and while it lasted it fought the collapsed/expanded policy.
+
+        Returns:
+            None.
         """
         if not state:
             return
@@ -4566,6 +5594,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         A saved position outlives the monitor it was saved on: unplug the second display and the
         window would reopen off-canvas, with no way to drag it back.
+
+        Returns:
+            None.
         """
         try:
             target = qt.QRect(x, y, max(1, self.width()), max(1, self.height()))
@@ -4577,7 +5608,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             pass                                 # no screen info: keep the default placement
 
     def _page_key(self, page) -> str:
-        """The backup id of a page: derived from its path, or minted once for an untitled buffer."""
+        """The backup id of a page: derived from its path, or minted once for an untitled buffer.
+
+        Returns:
+            str: the page's backup id.
+        """
         path = getattr(page, "file_path", None)
         if path:
             return session.Session.key(path)
@@ -4588,7 +5623,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         return key
 
     def _store_session(self) -> None:
-        """Record the open tabs, and back up every buffer that has unsaved work in it."""
+        """Record the open tabs, and back up every buffer that has unsaved work in it.
+
+        Returns:
+            None.
+        """
         store = getattr(self, "_session", None)
         if store is None:
             return
@@ -4634,6 +5673,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         `enabled` False means "remember nothing" (no project loaded): the tabs close and no store is
         touched at all, rather than spilling into the per-user one.
+
+        Returns:
+            None.
         """
         self._store_session()                            # flush what belongs to the previous store
         while self.tabs.count():
@@ -4646,7 +5688,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._restore_session()
 
     def _restore_session(self) -> None:
-        """Reopen the tabs of the previous run, unsaved work included."""
+        """Reopen the tabs of the previous run, unsaved work included.
+
+        Returns:
+            None.
+        """
         data = self._session.load()
         self.recent = [p for p in (data.get("recent") or []) if isinstance(p, str)][:self.RECENT_MAX]
         self.autosave = bool(data.get("autosave"))
@@ -4665,7 +5711,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.tabs.tabBar().update()
 
     def _restore_tab(self, entry:dict) -> None:
-        """Rebuild one tab from its session entry."""
+        """Rebuild one tab from its session entry.
+
+        Returns:
+            None.
+        """
         kind, path, preview = entry.get("kind"), entry.get("path"), bool(entry.get("preview"))
 
         if kind == "diff":
@@ -4702,7 +5752,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page.code.setTextCursor(cursor)
 
     def closeEvent(self, event) -> None:
-        """Flush the session on the way out, so a close never costs the layout or unsaved work."""
+        """Flush the session on the way out, so a close never costs the layout or unsaved work.
+
+        Returns:
+            None.
+        """
         try:
             self._store_session()
         except Exception:
@@ -4716,7 +5770,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     NATIVE_KEYS = {"Ctrl+Z", "Ctrl+Shift+Z", "Ctrl+X", "Ctrl+C", "Ctrl+V", "Ctrl+A"}
 
     def _build_menus(self) -> None:
-        """Build the menu bar. Run/Edit actions act on the current tab."""
+        """Build the menu bar. Run/Edit actions act on the current tab.
+
+        Returns:
+            None.
+        """
         self._shortcuts = []                 # QShortcut objects die with no python reference
         self.file_menu = file_menu = self.menu_bar.addMenu("File")
         self._add(file_menu, "New File\tCtrl+N",         self.new_file)
@@ -4909,7 +5967,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         help_menu.addSeparator()
         self._add(help_menu, "About", self.show_about)
 
-    def _add(self, menu, label:str, slot, check:bool=False, bind:bool=True):
+    def _add(self, menu, label:str, slot, check:bool=False, bind:bool=True) -> object:
         """Add a menu entry; a "Name\tCtrl+X" label also installs the shortcut for real.
 
         The tab in the label only right-aligns a hint in the menu - it binds nothing. Without a live
@@ -4920,6 +5978,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         sequence ambiguous and fire neither.
 
         Returns the QAction, so a caller can enable or check it later.
+
+        Returns:
+            object: the created QAction.
         """
         sequence = label.partition("\t")[2]
         action = qt.QAction(label, self)
@@ -4948,11 +6009,18 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         A menu's aboutToShow can reach a STALE editor: reloading window.py leaves the previous
         instance alive on the python side with its C++ widgets already destroyed, and touching one
         raises. The layout toggles carry the same guard for the same reason.
+
+        Returns:
+            bool: True while this instance and its tab widget are still valid.
         """
         return qt.is_valid(self) and qt.is_valid(self.tabs)
 
     def _sync_file_menu(self) -> None:
-        """Grey out what cannot act right now, the way VS Code does."""
+        """Grey out what cannot act right now, the way VS Code does.
+
+        Returns:
+            None.
+        """
         if not self._alive():
             return
         try:
@@ -4980,7 +6048,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             pass          # a widget died between the validity check and the call
 
     def _fill_recent(self) -> None:
-        """Rebuild Open Recent from the stored list, dropping paths that no longer exist."""
+        """Rebuild Open Recent from the stored list, dropping paths that no longer exist.
+
+        Returns:
+            None.
+        """
         if not self._alive() or not qt.is_valid(self.recent_menu):
             return
         self.recent_menu.clear()
@@ -4994,11 +6066,20 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self.recent_menu.addAction("Clear Recently Opened", self._clear_recent)
 
     def _clear_recent(self) -> None:
+        """Clear recent.
+
+        Returns:
+            None.
+        """
         self.recent = []
         self._touch_session()
 
     def _fill_folders(self) -> None:
-        """Rebuild the Remove Folder submenu from the workspace roots."""
+        """Rebuild the Remove Folder submenu from the workspace roots.
+
+        Returns:
+            None.
+        """
         if not self._alive() or not qt.is_valid(self.folders_menu):
             return
         self.folders_menu.clear()
@@ -5010,13 +6091,21 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ---- Edit menu commands
 
     def find_in_file(self, replace:bool=False) -> None:
-        """Open the floating find panel on the current tab."""
+        """Open the floating find panel on the current tab.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is not None:
             page.search.show_panel(replace=replace)
 
     def find_in_files(self) -> None:
-        """Switch the side bar to Search and put the caret in its field."""
+        """Switch the side bar to Search and put the caret in its field.
+
+        Returns:
+            None.
+        """
         self.sidebar.show_view("search")
         if not self.sidebar.isVisibleTo(self):
             self.sidebar.setVisible(True)
@@ -5025,7 +6114,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.sidebar.search.field.selectAll()
 
     def find_occurrences(self) -> None:
-        """Highlight every hit of the word under the caret, through the find panel."""
+        """Highlight every hit of the word under the caret, through the find panel.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5038,7 +6131,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page.search.search()
 
     def delete_line(self) -> None:
-        """Remove the lines the selection touches, in one undo step."""
+        """Remove the lines the selection touches, in one undo step.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5055,17 +6152,29 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page.code.setTextCursor(cursor)
 
     def _to_code(self, method:str, *args) -> None:
-        """Call `method` on the current editor, if any."""
+        """Call `method` on the current editor, if any.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is not None:
             getattr(page.code, method)(*args)    # move_line takes a direction, the rest take nothing
 
     def _join_lines(self) -> None:
-        """Ctrl+Shift+J - VS Code's Join Lines. Ctrl+J is already Toggle Panel here."""
+        """Ctrl+Shift+J - VS Code's Join Lines. Ctrl+J is already Toggle Panel here.
+
+        Returns:
+            None.
+        """
         self._to_code("join_lines")
 
     def _toggle_trim(self, on:bool=None) -> None:
-        """Whether a save strips trailing whitespace first."""
+        """Whether a save strips trailing whitespace first.
+
+        Returns:
+            None.
+        """
         self.trim_on_save = (not self.trim_on_save) if on is None else bool(on)
         action = getattr(self, "action_trim", None)
         if action is not None and action.isChecked() != self.trim_on_save:
@@ -5073,21 +6182,36 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._touch_session()
 
     def step_change(self, step:int) -> None:
-        """Alt+F3 - jump to the next git hunk in this file, and say so when there is none."""
+        """Alt+F3 - jump to the next git hunk in this file, and say so when there is none.
+
+        Returns:
+            None.
+        """
         code = getattr(self.current_page(), "code", None)
         if code is not None and not code.step_change(step):
             self.status.set_message("No changes against HEAD in this file.")
 
     def goto_definition(self) -> None:
-        """F12 - jump to where the symbol under the caret is defined, within this file."""
+        """F12 - jump to where the symbol under the caret is defined, within this file.
+
+        Returns:
+            None.
+        """
         self._symbol_action("go_to_definition", "Go to Definition")
 
     def rename_symbol(self) -> None:
-        """F2 - rename the symbol under the caret everywhere in this file."""
+        """F2 - rename the symbol under the caret everywhere in this file.
+
+        Returns:
+            None.
+        """
         self._symbol_action("rename_symbol", "Rename Symbol")
 
     def _symbol_action(self, method:str, title:str) -> None:
         """Run a symbol command and SAY why when it declines - a key that silently does nothing
+
+        Returns:
+            None.
         reads as broken."""
         code = getattr(self.current_page(), "code", None)
         if code is None:
@@ -5101,7 +6225,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ---- Open Editors
 
     def _refresh_open_editors(self, *_) -> None:
-        """Rebuild the OPEN EDITORS list from the tab bar it mirrors."""
+        """Rebuild the OPEN EDITORS list from the tab bar it mirrors.
+
+        Returns:
+            None.
+        """
         if not self.sidebar.open_section.is_expanded():
             return                               # collapsed: nothing to keep in step
         entries = []
@@ -5117,7 +6245,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.sidebar.open_section.refresh_height()   # the list just changed height
 
     def _close_other_tabs(self, keep:int) -> None:
-        """Close every tab but `keep`, from the end so the earlier indexes stay valid."""
+        """Close every tab but `keep`, from the end so the earlier indexes stay valid.
+
+        Returns:
+            None.
+        """
         page = self.tabs.widget(keep)
         for index in reversed(range(self.tabs.count())):
             if self.tabs.widget(index) is not page:
@@ -5128,6 +6260,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         The embedded panel skipped this before, on the grounds that its side bar is hidden - but the
         tree's own change markers come from the same scan, and those ARE visible there.
+
+        Returns:
+            None.
         """
         if not self._alive():
             return
@@ -5143,6 +6278,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         timeline's `git log --follow` alone took a fifth of a second per tab click to fill a panel
         nobody could see. Each one loads when it opens (CollapsibleSection.on_expand) and from then
         on follows the current file.
+
+        Returns:
+            None.
         """
         page = self.tabs.currentWidget()
         path = getattr(page, "file_path", None) or ""
@@ -5167,6 +6305,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Only on a tab change or a save, never on the typing debounce: `git show` spawns a process,
         and doing that per keystroke is what made selecting a script feel slow before.
+
+        Returns:
+            None.
         """
         page = page if page is not None else self.tabs.currentWidget()
         if not isinstance(page, EditorPage):
@@ -5183,18 +6324,30 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page.code.set_changes(diff_hunks(old, page.code.toPlainText()) if old else [])
 
     def _load_outline(self) -> None:
-        """Fill the outline when its section is opened."""
+        """Fill the outline when its section is opened.
+
+        Returns:
+            None.
+        """
         page = self.tabs.currentWidget()
         self.sidebar.outline.set_source(getattr(page, "file_path", None) or "",
                                         page.code.toPlainText() if isinstance(page, EditorPage) else "")
         self._follow_caret()
 
     def _load_timeline(self) -> None:
-        """Fill the timeline when its section is opened."""
+        """Fill the timeline when its section is opened.
+
+        Returns:
+            None.
+        """
         self.sidebar.timeline.set_file(getattr(self.tabs.currentWidget(), "file_path", None) or "")
 
     def _follow_caret(self, *_) -> None:
-        """Keep the outline's highlight, and the status bar's position, on the caret."""
+        """Keep the outline's highlight, and the status bar's position, on the caret.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5210,6 +6363,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Nothing is computed while the panel is hidden - it is hidden by default, and resolving a name
         and reading maya's help on every caret move to fill something nobody can see is exactly the
         kind of cost that made this editor feel slow before.
+
+        Returns:
+            None.
         """
         if not self.secondary.isVisibleTo(self):
             return
@@ -5222,13 +6378,21 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.secondary.set_call(name, info, argument, self.theme)
 
     def _goto_line(self, line:int) -> None:
-        """Jump the current tab to `line` (the outline clicked)."""
+        """Jump the current tab to `line` (the outline clicked).
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is not None:
             self._goto_error(page.file_path or "", int(line))
 
     def open_revision(self, path:str, root:str, sha:str) -> None:
-        """Open a diff of `path` at commit `sha` against what is on disk now."""
+        """Open a diff of `path` at commit `sha` against what is on disk now.
+
+        Returns:
+            None.
+        """
         if not path or not sha:
             return
         try:
@@ -5245,7 +6409,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._place_tab(page, file_icon(path), label, preview=True)
 
     def open_commit(self, path:str, root:str, sha:str) -> None:
-        """Open the whole commit `sha` as a unified patch."""
+        """Open the whole commit `sha` as a unified patch.
+
+        Returns:
+            None.
+        """
         if not sha:
             return
         text = vcs.patch(root or os.path.dirname(path or ""), sha)
@@ -5257,11 +6425,21 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._place_tab(PatchPage(label, text, path), _icon("file.png"), label, preview=True)
 
     def _update_menu_targets(self, *_) -> None:
+        """Update menu targets.
+
+        Returns:
+            None.
+        """
         self._show_welcome_if_empty()
 
     # ------------------------------------------------------------------ slots
 
     def _run_selection(self) -> None:
+        """Run selection.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5271,6 +6449,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             page.code.execute(page.code.toPlainText())
 
     def _run_all(self) -> None:
+        """Run all.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is not None:
             page.code.execute(page.code.toPlainText())
@@ -5278,7 +6461,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ------------------------------------------------------------------ layout toggles
 
     def _build_layout_toggles(self) -> None:
-        """Put the three VS Code layout toggles as icons on the right end of the menu bar."""
+        """Put the three VS Code layout toggles as icons on the right end of the menu bar.
+
+        Returns:
+            None.
+        """
         # keep a python reference: setCornerWidget does not reliably transfer ownership in PySide, and a
         # garbage-collected corner takes its buttons with it (invisible toggles, then RuntimeError)
         corner = qt.QWidget(self.menu_bar)
@@ -5314,7 +6501,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._refresh_layout_toggles()
 
     def _refresh_layout_toggles(self) -> None:
-        """Swap each toggle's icon to reflect whether its panel is currently shown."""
+        """Swap each toggle's icon to reflect whether its panel is currently shown.
+
+        Returns:
+            None.
+        """
         buttons = [(b, base) for b, base in getattr(self, "_layout_buttons", []) if qt.is_valid(b)]
         if not buttons:
             return        # corner bar gone (window closed, or a stale instance after a reload)
@@ -5335,6 +6526,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Staged entries compare HEAD against the index; unstaged ones compare the index against the file
         on disk, which is exactly what each group in the panel represents.
+
+        Returns:
+            None.
         """
         root = root or os.path.dirname(path)
         try:
@@ -5366,7 +6560,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._place_tab(page, file_icon(path), label, preview)
 
     def _open_sources(self) -> list:
-        """(path, source) for every open editor tab, for the Problems panel to compile."""
+        """(path, source) for every open editor tab, for the Problems panel to compile.
+
+        Returns:
+            list: the (path, source) pairs for every open editor tab.
+        """
         sources = []
         for index in range(self.tabs.count()):
             page = self.tabs.widget(index)
@@ -5375,7 +6573,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         return sources
 
     def _panel_changed(self, index:int) -> None:
-        """Refresh the tab that just became visible, and show its own controls only when relevant."""
+        """Refresh the tab that just became visible, and show its own controls only when relevant.
+
+        Returns:
+            None.
+        """
         current = self.panel.widget(index)
         if current is self.problems:
             self.problems.refresh()
@@ -5384,14 +6586,22 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             corner.setVisible(current is self.output)     # .py/.mel and echo only apply to the log
 
     def _problems_count_changed(self, count:int) -> None:
-        """Show the problem count as a blue bubble on the PROBLEMS tab, like VS Code does."""
+        """Show the problem count as a blue bubble on the PROBLEMS tab, like VS Code does.
+
+        Returns:
+            None.
+        """
         index = self.panel.indexOf(self.problems)
         bar = self.panel.tabBar()
         if index >= 0 and hasattr(bar, "set_badge"):
             bar.set_badge(index, count)
 
     def _activity_view_changed(self, name:str) -> None:
-        """Switch the side bar to the picked view, revealing it if it was hidden."""
+        """Switch the side bar to the picked view, revealing it if it was hidden.
+
+        Returns:
+            None.
+        """
         self.sidebar.show_view(name)
         if not self.sidebar.isVisibleTo(self):
             self.sidebar.setVisible(True)
@@ -5400,11 +6610,20 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     PANEL_KEYS = ("sidebar", "panel", "secondary")
     PANEL_MIN = 120                    # what a reopened panel falls back to, having never been sized
 
-    def _panel_named(self, key:str):
+    def _panel_named(self, key:str) -> object:
+        """The panel widget named `key`.
+
+        Returns:
+            object: the panel widget for `key`, or None when unknown.
+        """
         return {"sidebar": self.sidebar, "panel": self.panel, "secondary": self.secondary}.get(key)
 
     def _panel_extent(self, panel) -> int:
-        """How wide (or tall) `panel` is along its splitter's axis."""
+        """How wide (or tall) `panel` is along its splitter's axis.
+
+        Returns:
+            int: the panel's width or height along its splitter's axis.
+        """
         splitter = panel.parent()
         if not isinstance(splitter, qt.QSplitter):
             return 0
@@ -5416,6 +6635,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         A QSplitter does not hand a hidden child its old size back: reopening gave it whatever was
         left over, so every toggle quietly undid the width you had set. The extent is remembered on
         the way out and put back on the way in.
+
+        Returns:
+            None.
         """
         if not qt.is_valid(panel):
             return
@@ -5431,7 +6653,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._refresh_layout_toggles()
 
     def _restore_panel_extent(self, panel) -> None:
-        """Give `panel` back the extent it had, taking it from its largest sibling."""
+        """Give `panel` back the extent it had, taking it from its largest sibling.
+
+        Returns:
+            None.
+        """
         if not qt.is_valid(panel) or not panel.isVisibleTo(self):
             return
         splitter = panel.parent()
@@ -5453,15 +6679,27 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         splitter.setSizes(sizes)
 
     def _toggle_sidebar(self) -> None:
-        """Show/hide the primary side bar (Workspace / Outline / Timeline)."""
+        """Show/hide the primary side bar (Workspace / Outline / Timeline).
+
+        Returns:
+            None.
+        """
         self._toggle_panel(self.sidebar)
 
     def _toggle_output(self) -> None:
-        """Show/hide the bottom panel (Output / Problems / Debug Console)."""
+        """Show/hide the bottom panel (Output / Problems / Debug Console).
+
+        Returns:
+            None.
+        """
         self._toggle_panel(self.panel)
 
     def _toggle_secondary(self) -> None:
-        """Show/hide the secondary side bar on the right."""
+        """Show/hide the secondary side bar on the right.
+
+        Returns:
+            None.
+        """
         self._toggle_panel(self.secondary)
         self._sync_argument_completion()
 
@@ -5470,6 +6708,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Tied to that panel on purpose: it is where those names come from, and it is the switch the
         user already reaches for when they want to see what a call takes.
+
+        Returns:
+            None.
         """
         on = self.secondary.isVisibleTo(self)
         for index in range(self.tabs.count()):
@@ -5480,7 +6721,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ---- Go menu commands
 
     def _mark_location(self) -> None:
-        """Remember where we are, so Back can return to it."""
+        """Remember where we are, so Back can return to it.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None or not page.file_path:
             return
@@ -5493,7 +6738,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._history_at = len(self._history) - 1
 
     def navigate(self, step:int) -> None:
-        """Walk the jump history backwards or forwards."""
+        """Walk the jump history backwards or forwards.
+
+        Returns:
+            None.
+        """
         target = self._history_at + step
         if not (0 <= target < len(self._history)):
             return
@@ -5502,19 +6751,31 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._goto_error(path, line)
 
     def goto_last_edit(self) -> None:
-        """Jump to where the last edit happened."""
+        """Jump to where the last edit happened.
+
+        Returns:
+            None.
+        """
         if self._last_edit:
             self._goto_error(*self._last_edit)
 
     def _touch_mru(self, *_) -> None:
-        """Move the current tab to the front of the most-recently-used order."""
+        """Move the current tab to the front of the most-recently-used order.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         self._mru = [p for p in self._mru if p is not page and qt.is_valid(p)]
         if page is not None:
             self._mru.insert(0, page)
 
     def _step_editor(self, step:int) -> None:
-        """Next / Previous editor in TAB order, wrapping round the ends."""
+        """Next / Previous editor in TAB order, wrapping round the ends.
+
+        Returns:
+            None.
+        """
         count = self.tabs.count()
         if count > 1:
             self.tabs.setCurrentIndex((self.tabs.currentIndex() + step) % count)
@@ -5524,6 +6785,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Kept as widgets rather than indices: closing a tab renumbers every index after it, and the
         history would then walk to the wrong files.
+
+        Returns:
+            None.
         """
         self._mru = [p for p in self._mru if qt.is_valid(p) and self.tabs.indexOf(p) >= 0]
         if len(self._mru) < 2:
@@ -5539,6 +6803,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Only the FILE rows are rebuilt. The commands above them are built once, in _build_menus:
         rebuilt here they would install their shortcut again on every showing, and two live
         QShortcuts on one sequence fire neither.
+
+        Returns:
+            None.
         """
         if not self._alive() or not qt.is_valid(self.editors_menu):
             return
@@ -5555,7 +6822,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self._editor_entries.append(action)
 
     def goto_file(self) -> None:
-        """Quick-open: every file under the workspace roots, filtered as you type."""
+        """Quick-open: every file under the workspace roots, filtered as you type.
+
+        Returns:
+            None.
+        """
         entries, seen = [], set()
         for root in self.sidebar.workspace.roots:
             for base, folders, names in os.walk(root):
@@ -5573,7 +6844,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                                          "Go to file")
 
     def goto_symbol(self) -> None:
-        """Quick-open the definitions of the current file, read straight from its syntax tree."""
+        """Quick-open the definitions of the current file, read straight from its syntax tree.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5585,7 +6860,12 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         entries = []
 
-        def walk(node, prefix=""):
+        def walk(node, prefix="") -> None:
+            """Recurse the AST, collecting a Go-to-symbol entry per class and function.
+
+            Returns:
+                None.
+            """
             for child in getattr(node, "body", []):
                 if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     kind = "class" if isinstance(child, ast.ClassDef) else "def"
@@ -5598,7 +6878,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.palette_widget.open_entries(entries, "Go to symbol")
 
     def goto_bracket(self) -> None:
-        """Jump to the bracket matching the one at the caret."""
+        """Jump to the bracket matching the one at the caret.
+
+        Returns:
+            None.
+        """
         page = self.current_page()
         if page is None:
             return
@@ -5613,7 +6897,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page.code.ensureCursorVisible()
 
     def step_problem(self, step:int) -> None:
-        """Walk through the problems the checker found, in order."""
+        """Walk through the problems the checker found, in order.
+
+        Returns:
+            None.
+        """
         rows = []
         for index in range(self.problems.tree.topLevelItemCount()):
             parent = self.problems.tree.topLevelItem(index)
@@ -5633,7 +6921,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ---- Help menu commands
 
     def show_shortcuts(self) -> None:
-        """List every shortcut the menus declare, and whether it is bound here."""
+        """List every shortcut the menus declare, and whether it is bound here.
+
+        Returns:
+            None.
+        """
         lines = []
         for top in self.menu_bar.actions():
             menu = top.menu()
@@ -5654,7 +6946,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                                message_text="\n".join(lines).strip(), informative_text=note, parent=self)
 
     def show_about(self) -> None:
-        """Version and where this editor keeps its state."""
+        """Version and where this editor keeps its state.
+
+        Returns:
+            None.
+        """
         compat.message.warning(
             title="About", buttons=["Close"],
             message_text="%s  %s" % (Editor.title, Editor.version),
@@ -5665,14 +6961,22 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
     # ---- View menu commands
 
     def _show_view(self, name:str) -> None:
-        """Bring a side bar view forward, revealing the side bar when it is hidden."""
+        """Bring a side bar view forward, revealing the side bar when it is hidden.
+
+        Returns:
+            None.
+        """
         self.sidebar.show_view(name)
         if not self.sidebar.isVisibleTo(self):
             self.sidebar.setVisible(True)
             self._refresh_layout_toggles()
 
     def _show_panel(self, widget) -> None:
-        """Bring a bottom panel tab forward, revealing the panel when it is hidden."""
+        """Bring a bottom panel tab forward, revealing the panel when it is hidden.
+
+        Returns:
+            None.
+        """
         index = self.panel.indexOf(widget)
         if index < 0:
             return
@@ -5682,7 +6986,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.panel.setCurrentIndex(index)
 
     def toggle_word_wrap(self, on:bool=None) -> None:
-        """Wrap long lines, on every open tab and on the ones opened afterwards."""
+        """Wrap long lines, on every open tab and on the ones opened afterwards.
+
+        Returns:
+            None.
+        """
         self.word_wrap = (not self.word_wrap) if on is None else bool(on)
         mode = qt.QPlainTextEdit.WidgetWidth if self.word_wrap else qt.QPlainTextEdit.NoWrap
         for index in range(self.tabs.count()):
@@ -5692,14 +7000,27 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._touch_session()
 
     def show_palette(self) -> None:
-        """Open the command palette, or close it when it is already up."""
+        """Open the command palette, or close it when it is already up.
+
+        Returns:
+            None.
+        """
         self.palette_widget.toggle()
 
     def _palette_actions(self) -> list:
-        """Every leaf action of the menu bar, submenus included."""
+        """Every leaf action of the menu bar, submenus included.
+
+        Returns:
+            list: every leaf QAction of the menu bar, submenus included.
+        """
         found, seen = [], set()
 
-        def walk(menu):
+        def walk(menu) -> None:
+            """Recurse into `menu`, collecting its leaf actions.
+
+            Returns:
+                None.
+            """
             for action in menu.actions():
                 if action.isSeparator():
                     continue
@@ -5716,7 +7037,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         return found
 
     def _toggle_sticky(self, on:bool=None) -> None:
-        """Pin or unpin the enclosing class/def band at the top of every open editor tab."""
+        """Pin or unpin the enclosing class/def band at the top of every open editor tab.
+
+        Returns:
+            None.
+        """
         self.sticky_on = (not self.sticky_on) if on is None else bool(on)
         action = getattr(self, "action_sticky", None)
         if action is not None and action.isChecked() != self.sticky_on:
@@ -5731,7 +7056,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._touch_session()
 
     def _toggle_minimap(self, on:bool=None) -> None:
-        """Show or hide the minimap strip on every open editor tab."""
+        """Show or hide the minimap strip on every open editor tab.
+
+        Returns:
+            None.
+        """
         self.minimap_on = (not self.minimap_on) if on is None else bool(on)
         action = getattr(self, "action_minimap", None)
         if action is not None and action.isChecked() != self.minimap_on:
@@ -5752,12 +7081,19 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         Imported here rather than at the top: main imports window, so the other direction can only
         happen at call time.
+
+        Returns:
+            None.
         """
         from . import main
         qt.QTimer.singleShot(0, main.reset)      # not while this menu's own click is being handled
 
     def show_manage(self) -> None:
-        """The gear menu: the handful of settings this editor actually has."""
+        """The gear menu: the handful of settings this editor actually has.
+
+        Returns:
+            None.
+        """
         menu = qt.QMenu(self)
         menu.addAction("Command Palette...\tCtrl+Shift+P", self.show_palette)
         menu.addSeparator()
@@ -5794,6 +7130,9 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Three things have to move together: the stylesheet, the colours the delegates paint by hand,
         and the surface each open CodeTextEdit was given at construction. Missing the last one leaves
         every open tab on the previous background until it is closed and reopened.
+
+        Returns:
+            None.
         """
         if name == self.theme_name:
             return
@@ -5810,7 +7149,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._touch_session()
 
     def _goto_error(self, file_path:str, line:int) -> None:
-        """Open the file from a traceback and jump to the line."""
+        """Open the file from a traceback and jump to the line.
+
+        Returns:
+            None.
+        """
         if file_path and os.path.isfile(file_path):
             self.open_file(file_path)
         page = self.current_page()

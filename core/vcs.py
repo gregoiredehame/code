@@ -3,6 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
+Modified: Aug 01, 2026
 Module: code_editor.core.vcs
 Execute: from code_editor.core import vcs
 
@@ -29,7 +30,14 @@ _LETTER = {
 
 
 def is_git_repo(folder:str=None) -> bool:
-    """Return True if `folder` is inside a git working tree."""
+    """Return True if `folder` is inside a git working tree.
+
+    Args:
+        folder: (str): - path to test.
+
+    Returns:
+        bool: True when the folder is inside a git working tree.
+    """
     if not folder or not os.path.isdir(folder):
         return False
     try:
@@ -43,7 +51,14 @@ def is_git_repo(folder:str=None) -> bool:
 
 
 def submodules(folder:str=None) -> set:
-    """Return the set of absolute submodule paths under `folder`'s git repo (empty if none / not a repo)."""
+    """Return the set of absolute submodule paths under `folder`'s git repo.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        set: absolute submodule paths (empty if none or not a repo).
+    """
     result = set()
     if not folder or not os.path.isdir(folder):
         return result
@@ -73,6 +88,12 @@ def status(folder:str=None) -> dict:
 
     Letters follow VS Code: M (modified), A (added), U (untracked), D (deleted), R (renamed), C (conflict).
     Returns an empty dict when `folder` is not a git repo or git is unavailable.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        dict: {absolute_path: letter} for every changed path.
     """
     result = {}
     if not folder or not os.path.isdir(folder):
@@ -98,30 +119,46 @@ def status(folder:str=None) -> dict:
     return result
 
 
-def _entries(raw:str, base:str):
+def _entries(raw:str, base:str) -> object:
     """Yield (index_status, worktree_status, absolute_path) for each `git status --porcelain -z` entry.
 
     Entries are NUL-separated with a fixed layout: "XY PATH" (2 status chars, one space, then the path,
     which may itself contain spaces). A rename adds a second NUL field holding the old name.
+
+    Args:
+        raw:  (str): - raw NUL-separated porcelain output.
+        base: (str): - repository root used to build absolute paths.
+
+    Returns:
+        object: generator of (index_status, worktree_status, absolute_path) tuples.
     """
     tokens = raw.split("\0")
-    i = 0
-    while i < len(tokens):
-        entry = tokens[i]
+    index = 0
+    while index < len(tokens):
+        entry = tokens[index]
         if len(entry) < 3:                     # empty or malformed
-            i += 1
+            index += 1
             continue
         x, y = entry[0], entry[1]              # index status, worktree status (fixed columns)
         path = entry[3:]                       # skip "XY " (2 status chars + 1 separator space)
         if x == "R" or y == "R":
-            i += 1                             # consume the "old name" field that follows
+            index += 1                         # consume the "old name" field that follows
         if path:
             yield x, y, os.path.normpath(os.path.join(base, path))
-        i += 1
+        index += 1
 
 
 def _parse_porcelain(raw:str, base:str, result:dict) -> None:
-    """Fill `result` with one collapsed letter per path (worktree change wins over the index one)."""
+    """Fill `result` with one collapsed letter per path (worktree change wins over the index one).
+
+    Args:
+        raw:     (str): - raw NUL-separated porcelain output.
+        base:    (str): - repository root used to build absolute paths.
+        result: (dict): - mapping filled in place with {path: letter}.
+
+    Returns:
+        None: `result` is modified in place.
+    """
     for x, y, path in _entries(raw, base):
         code = y if y != " " else x
         letter = "R" if (x == "R" or y == "R") else _LETTER.get(code)
@@ -134,6 +171,12 @@ def changes(folder:str=None) -> tuple:
 
     Git tracks two independent states per file: the index (staged) and the working tree (unstaged), so a
     file can legitimately appear in both - edited, staged, then edited again.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        tuple: (staged, unstaged) dicts of {absolute_path: letter}.
     """
     staged, unstaged = {}, {}
     if not folder or not os.path.isdir(folder):
@@ -169,12 +212,25 @@ _CACHE = {}
 
 
 def invalidate() -> None:
-    """Forget the cached repository roots and branch names. Called whenever git state is re-read."""
+    """Forget the cached repository roots and branch names.
+
+    Called whenever git state is re-read.
+
+    Returns:
+        None: clears the module cache.
+    """
     _CACHE.clear()
 
 
 def repo_root_cached(folder:str=None) -> str:
-    """`repo_root`, answered from memory after the first time."""
+    """`repo_root`, answered from memory after the first time.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        str: absolute repository root, or an empty string.
+    """
     key = ("root", os.path.normcase(folder or ""))
     if key not in _CACHE:
         _CACHE[key] = repo_root(folder)
@@ -182,7 +238,14 @@ def repo_root_cached(folder:str=None) -> str:
 
 
 def branch_cached(folder:str=None) -> str:
-    """`branch`, answered from memory after the first time."""
+    """`branch`, answered from memory after the first time.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        str: current branch name, or an empty string.
+    """
     key = ("branch", os.path.normcase(folder or ""))
     if key not in _CACHE:
         _CACHE[key] = branch(folder)
@@ -190,7 +253,14 @@ def branch_cached(folder:str=None) -> str:
 
 
 def repo_root(folder:str=None) -> str:
-    """Absolute path of the repository `folder` belongs to, or an empty string."""
+    """Absolute path of the repository `folder` belongs to, or an empty string.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        str: absolute repository root, or an empty string.
+    """
     if not folder or not os.path.isdir(folder):
         return ""
     try:
@@ -207,6 +277,14 @@ def show(folder:str=None, path:str=None, ref:str="HEAD") -> str:
 
     `ref` is "HEAD" for the last commit or "" for the index (staged) copy. Returns an empty string when
     the blob does not exist there, which is exactly what a newly added file looks like.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+        path:   (str): - absolute path of the file to read.
+        ref:    (str): - git revision to read from.
+
+    Returns:
+        str: the file's content at that revision, or an empty string.
     """
     root = repo_root(folder)
     if not root or not path:
@@ -237,6 +315,14 @@ def log(folder:str=None, limit:int=60, path:str=None) -> list:
 
     With `path`, only the commits that touched that ONE file, followed through renames - which is what
     a per-file timeline needs. --follow accepts a single path only, hence one file rather than a list.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+        limit:  (int): - maximum number of commits to return.
+        path:   (str): - restrict history to a single file.
+
+    Returns:
+        list: commit dicts, newest first.
     """
     commits = []
     root = repo_root(folder)
@@ -280,6 +366,14 @@ def patch(folder:str=None, sha:str=None, path:str=None) -> str:
 
     With `path`, only that file's hunks - which is what you want when you came from a file timeline
     and the commit touched forty others.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+        sha:    (str): - commit hash to diff.
+        path:   (str): - restrict the diff to a single file.
+
+    Returns:
+        str: the commit's diff, or an empty string.
     """
     root = repo_root(folder)
     if not root or not sha:
@@ -303,6 +397,13 @@ def remote_url(folder:str=None, name:str="origin") -> str:
 
     Remotes are written three ways - git@host:owner/repo.git, ssh://git@host/owner/repo, and plain
     https - and only the last can be opened. The first two are rewritten rather than rejected.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+        name:   (str): - remote name to look up.
+
+    Returns:
+        str: a browsable https url, or an empty string.
     """
     root = repo_root(folder)
     if not root:
@@ -326,7 +427,15 @@ def remote_url(folder:str=None, name:str="origin") -> str:
 
 
 def commit_url(folder:str=None, sha:str=None) -> str:
-    """A web address for `sha`, when the remote is a host whose url layout we know."""
+    """A web address for `sha`, when the remote is a host whose url layout we know.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+        sha:    (str): - commit hash to build a url for.
+
+    Returns:
+        str: a web url for the commit, or an empty string.
+    """
     url = remote_url(folder)
     if not url or not sha:
         return ""
@@ -339,7 +448,14 @@ def commit_url(folder:str=None, sha:str=None) -> str:
 
 
 def branch(folder:str=None) -> str:
-    """Current branch name, or an empty string when unavailable."""
+    """Current branch name, or an empty string when unavailable.
+
+    Args:
+        folder: (str): - path inside the repository to inspect.
+
+    Returns:
+        str: the current branch name, or an empty string.
+    """
     if not folder or not os.path.isdir(folder):
         return ""
     try:
@@ -352,7 +468,11 @@ def branch(folder:str=None) -> str:
 
 
 def _no_window() -> int:
-    """On Windows, prevent a console window flashing when git is spawned."""
+    """On Windows, prevent a console window flashing when git is spawned.
+
+    Returns:
+        int: the subprocess creation flag, or 0 on non-Windows.
+    """
     try:
         return subprocess.CREATE_NO_WINDOW      # windows only
     except AttributeError:
