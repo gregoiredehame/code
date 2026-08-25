@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Modified: Aug 01, 2026
+Modified: Aug 19, 2026
 Module: code_editor.window
 Execute: from code_editor import window
 
@@ -63,6 +63,35 @@ def _icon(name:str) -> "qt.QIcon":
         'qt.QIcon': the icon built from core/icons/<name>.
     """
     return qt.QIcon(os.path.join(__icons__, name))
+
+
+_PIN_ICON = None
+
+
+def _pin_icon() -> "qt.QIcon":
+    """A small drawn push-pin (a round head over a needle) for pinned tabs, no icon file needed.
+
+    Returns:
+        'qt.QIcon': a cached push-pin icon.
+    """
+    global _PIN_ICON
+    if _PIN_ICON is not None:
+        return _PIN_ICON
+    size = qt.px(16)
+    unit = size / 16.0
+    pixmap = qt.QPixmap(size, size)
+    pixmap.fill(qt.Qt.transparent)
+    painter = qt.QPainter(pixmap)
+    painter.setRenderHint(qt.QPainter.Antialiasing, True)
+    colour = qt.QColor("#c8c8c8")
+    painter.setPen(qt.QPen(colour, max(1.0, 1.4 * unit)))
+    painter.drawLine(qt.QPointF(8 * unit, 9 * unit), qt.QPointF(8 * unit, 13 * unit))   # needle
+    painter.setPen(qt.Qt.NoPen)
+    painter.setBrush(colour)
+    painter.drawEllipse(qt.QRectF(4.5 * unit, 3 * unit, 7 * unit, 7 * unit))            # head
+    painter.end()
+    _PIN_ICON = qt.QIcon(pixmap)
+    return _PIN_ICON
 
 
 def diff_hunks(old:str, new:str) -> list:
@@ -471,9 +500,117 @@ class PreviewTabBar(qt.QTabBar):
         """
         super().__init__(parent)
         self.is_preview = lambda index: False       # replaced by the window
+        self.is_pinned = lambda index: False        # replaced by the window: draws a pin glyph
+        self.mover = None                           # window callback: move a tab between panes on drop
+        self._press = None                          # (index, pos) of a left press, to start a cross-pane drag
+        self._drop_at = -1                          # insertion index under a hovering drag (-1 = none)
+        self.setAcceptDrops(True)
         font = self.font()                          # the labels are hand-drawn: pin the size ourselves
         font.setPixelSize(self.FONT)
         self.setFont(font)
+
+    MIME = "application/x-kata-tab"
+    _dragging = None                                # (source_bar, index) while a cross-pane drag is in flight
+
+    @staticmethod
+    def _drop_pos(event) -> "qt.QPoint":
+        """The drop position as a QPoint, across PySide2 (pos) and PySide6 (position)."""
+        return event.position().toPoint() if hasattr(event, "position") else event.pos()
+
+    def mousePressEvent(self, event) -> None:
+        """Record a left press so a drag that leaves the bar can move the tab to another pane.
+
+        Returns:
+            None.
+        """
+        if event.button() == qt.Qt.LeftButton:
+            self._press = (self.tabAt(event.pos()), event.pos())
+        super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event) -> None:
+        """Start a cross-pane drag once the cursor leaves the bar; inside it, native reordering runs.
+
+        Returns:
+            None.
+        """
+        if (self._press and (event.buttons() & qt.Qt.LeftButton)
+                and self._press[0] >= 0 and not self.rect().contains(event.pos())):
+            index, self._press = self._press[0], None
+            PreviewTabBar._dragging = (self, index)
+            data = qt.QtCore.QMimeData()
+            data.setData(self.MIME, b"1")
+            drag = qt.QDrag(self)
+            drag.setMimeData(data)
+            drag.setPixmap(self.grab(self.tabRect(index)))
+            (drag.exec_ if hasattr(drag, "exec_") else drag.exec)(qt.Qt.MoveAction)
+            PreviewTabBar._dragging = None
+            return
+        super().mouseMoveEvent(event)
+
+    def _drop_index(self, pos) -> int:
+        """The insertion index under `pos`: before/after a tab by its centre, or the end past the last.
+
+        Returns:
+            int: the insertion index in [0, count].
+        """
+        index = self.tabAt(pos)
+        if index < 0:
+            return self.count()
+        rect = self.tabRect(index)
+        return index if pos.x() < rect.center().x() else index + 1
+
+    def dragEnterEvent(self, event) -> None:
+        """Accept a tab dragged from another pane and show the insertion marker.
+
+        Returns:
+            None.
+        """
+        if event.mimeData().hasFormat(self.MIME):
+            self._drop_at = self._drop_index(self._drop_pos(event))
+            self.update()
+            event.acceptProposedAction()
+        else:
+            super().dragEnterEvent(event)
+
+    def dragMoveEvent(self, event) -> None:
+        """Move the insertion marker as the tab hovers this bar.
+
+        Returns:
+            None.
+        """
+        if event.mimeData().hasFormat(self.MIME):
+            self._drop_at = self._drop_index(self._drop_pos(event))
+            self.update()
+            event.acceptProposedAction()
+        else:
+            super().dragMoveEvent(event)
+
+    def dragLeaveEvent(self, event) -> None:
+        """Clear the insertion marker when the drag leaves this bar.
+
+        Returns:
+            None.
+        """
+        self._drop_at = -1
+        self.update()
+        super().dragLeaveEvent(event)
+
+    def dropEvent(self, event) -> None:
+        """Drop the dragged tab onto this pane at the marked insertion position.
+
+        Returns:
+            None.
+        """
+        if event.mimeData().hasFormat(self.MIME) and PreviewTabBar._dragging and self.mover:
+            source_bar, source_index = PreviewTabBar._dragging
+            drop = self._drop_at if self._drop_at >= 0 else self._drop_index(self._drop_pos(event))
+            self._drop_at = -1
+            self.update()
+            self.mover(source_bar, source_index, self, drop)
+            event.acceptProposedAction()
+        else:
+            self._drop_at = -1
+            super().dropEvent(event)
 
     def paintEvent(self, event) -> None:
         """Draw each tab: shape from the style, then icon and label laid out by hand.
@@ -489,6 +626,10 @@ class PreviewTabBar(qt.QTabBar):
 
             rect = self.tabRect(index)
             left = rect.left() + qt.px(self.LEFT)
+            if self.is_pinned(index):               # pin glyph before the file icon (no widget, crash-safe)
+                pin = _pin_icon().pixmap(qt.px(12), qt.px(12))
+                painter.drawPixmap(left, rect.center().y() - pin.height() // 2, pin)
+                left += pin.width() + qt.px(self.SPACING)
             icon = self.tabIcon(index)
             if not icon.isNull():
                 size = self.iconSize()
@@ -510,6 +651,16 @@ class PreviewTabBar(qt.QTabBar):
                                                     max(0, right - left))
             painter.drawText(qt.QRect(left, rect.top(), max(0, right - left), rect.height()),
                              qt.Qt.AlignLeft | qt.Qt.AlignVCenter, text)
+
+        if self._drop_at >= 0:                          # insertion marker under a hovering cross-pane drag
+            if self._drop_at < self.count():
+                marker = self.tabRect(self._drop_at).left()
+            elif self.count():
+                marker = self.tabRect(self.count() - 1).right()
+            else:
+                marker = 0
+            painter.setPen(qt.QPen(qt.QColor("#0a84ff"), qt.px(2)))
+            painter.drawLine(marker, qt.px(2), marker, self.height() - qt.px(2))
 
 
 class ImagePage(qt.QWidget):
@@ -2985,6 +3136,7 @@ class Sidebar(qt.QWidget):
     closeAllEditors  = qt.signal()
     symbolActivated  = qt.signal(int)      # outline: jump to this line of the current file
     revisionActivated = qt.signal(str, str, str)   # timeline: path, repo root, commit sha
+    variablePrint    = qt.signal(str)      # variables: echo a global's full repr to the output
     commitRequested   = qt.signal(str, str, str)
     pathRenamed      = qt.signal(str, str)
     pathDeleted      = qt.signal(str)
@@ -3045,6 +3197,11 @@ class Sidebar(qt.QWidget):
         self.outline.symbolActivated.connect(self.symbolActivated)
         self.outline_section = CollapsibleSection("Outline", self.outline, expanded=False)
 
+        # VARIABLES — the user globals of the shared run namespace (what your scripts left behind)
+        self.variables = VariablesPanel()
+        self.variables.printRequested.connect(self.variablePrint)
+        self.variables_section = CollapsibleSection("Variables", self.variables, expanded=False)
+
         # TIMELINE — the git history of the current file
         self.timeline = TimelinePanel()
         self.timeline.revisionActivated.connect(self.revisionActivated)
@@ -3056,12 +3213,13 @@ class Sidebar(qt.QWidget):
         # leads=False: Open Editors heads this column, so Workspace keeps the separator that tells
         # the two apart
         self.sections = SectionStack(
-            [self.workspace_section, self.outline_section, self.timeline_section], leads=False)
+            [self.workspace_section, self.outline_section, self.variables_section, self.timeline_section], leads=False)
         self.open_section.set_leading(True)
         self.explorer_header = ViewHeader("Explorer")
         self.explorer_header.set_sections([("Open Editors", self.open_section),
                                            ("Workspace", self.workspace_section),
                                            ("Outline", self.outline_section),
+                                           ("Variables", self.variables_section),
                                            ("Timeline", self.timeline_section)])
         self._layout.insertWidget(0, self.explorer_header, 0)
         self._layout.insertWidget(1, self.open_section, 0)
@@ -3391,6 +3549,87 @@ class OpenEditorsPanel(qt.QWidget):
         menu.addAction("Close All", self.closeAll.emit)
         point = self.tree.viewport().mapToGlobal(pos)
         menu.exec_(point) if hasattr(menu, "exec_") else menu.exec(point)
+
+
+class VariablesPanel(qt.QWidget):
+    """The user globals of the shared run namespace - VS Code's Jupyter VARIABLES, for Maya scripting.
+
+    It reads the same namespace the editor and the Debug Console execute in, so anything you run (a
+    selection, the whole file, a console line) shows up here with its type and a short repr. Modules,
+    dunders and the editor's own baseline are hidden; a double click echoes the full value to the output.
+    """
+
+    printRequested = qt.signal(str)            # a global's name, to echo in full to the output
+    HIDDEN = {"__name__", "__builtins__", "__doc__", "__package__", "__loader__", "__spec__", "__file__"}
+
+    def __init__(self, parent:qt.QWidget=None) -> None:
+        """Build the variables panel: a single tree listing the namespace globals.
+
+        Returns:
+            None.
+        """
+        super().__init__(parent)
+        self.setObjectName("codeVariables")
+        self.setAttribute(qt.Qt.WA_StyledBackground, True)
+        self.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+
+        layout = qt.QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        self.tree = qt.QTreeWidget()
+        self.tree.setSizePolicy(qt.QSizePolicy.Expanding, qt.QSizePolicy.Expanding)
+        self.tree.setMinimumHeight(0)
+        self.tree.setObjectName("codeScmTree")     # shares the custom-painted row styling
+        self.tree.setHeaderHidden(True)
+        self.tree.setFrameShape(qt.QFrame.NoFrame)
+        self.tree.setIndentation(qt.px(4))
+        self.tree.setIconSize(qt.QSize(qt.px(16), qt.px(16)))
+        self.tree.setItemDelegate(SourceControlDelegate(self.tree))
+        self.tree.itemDoubleClicked.connect(self._print)
+        layout.addWidget(self.tree, 1)
+
+    def refresh(self, namespace:dict=None) -> None:
+        """Rebuild the list from `namespace`, hiding modules, dunders and the editor's baseline.
+
+        Args:
+            namespace: (dict): - the run namespace to read.
+
+        Returns:
+            None.
+        """
+        import types
+        self.tree.clear()
+        rows = []
+        for name, value in (namespace or {}).items():
+            if name in self.HIDDEN or (name.startswith("__") and name.endswith("__")):
+                continue
+            if isinstance(value, types.ModuleType):
+                continue
+            rows.append((name, value))
+        for name, value in sorted(rows, key=lambda row: row[0].lower()):
+            try:
+                short = repr(value).replace("\n", " ")
+            except Exception:
+                short = "<unrepresentable>"
+            if len(short) > 200:
+                short = short[:200] + "…"
+            item = qt.QTreeWidgetItem(self.tree, [name])
+            item.setData(0, _SUBTITLE_ROLE, "%s   %s" % (type(value).__name__, short))
+            item.setData(0, _LINE_ROLE, name)
+            item.setToolTip(0, "%s: %s = %s" % (name, type(value).__name__, short))
+        self.tree.updateGeometry()
+        self.updateGeometry()
+
+    def _print(self, item, column:int=0) -> None:
+        """Ask the window to echo the double-clicked global to the output.
+
+        Returns:
+            None.
+        """
+        name = item.data(0, _LINE_ROLE) if item is not None else None
+        if name:
+            self.printRequested.emit(name)
 
 
 class OutlinePanel(qt.QWidget):
@@ -4481,6 +4720,8 @@ class DebugConsole(qt.QWidget):
     is what makes this useful inside Maya.
     """
 
+    executed = qt.signal()                     # a prompt line ran: the namespace may have changed
+
     def __init__(self, namespace:dict, parent:qt.QWidget=None) -> None:
         """Build the debug console: a read-only output view over an input prompt.
 
@@ -4576,6 +4817,7 @@ class DebugConsole(qt.QWidget):
         printed = buffer.getvalue().rstrip()
         if printed:
             self._append(printed, "#cccccc")
+        self.executed.emit()
 
 
 # -------------------------------------------------------------------------------------------- window
@@ -4585,7 +4827,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     window_instance = None
     title           = "Code Editor"
-    version         = "0.1.0"
+    version         = "0.2.0"
 
     sessionStored = qt.signal(object)      # the layout that was just written, for embedders to mirror
 
@@ -4648,11 +4890,12 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.sidebar.diffRequested.connect(self.open_diff)
         # a lambda, not self.tabs.setCurrentIndex: the sidebar is wired BEFORE the tab widget is
         # built, so binding the method here would look it up on an Editor that has no `tabs` yet
-        self.sidebar.editorActivated.connect(lambda index: self.tabs.setCurrentIndex(index))
-        self.sidebar.editorClosed.connect(self.close_tab)
-        self.sidebar.closeOthers.connect(self._close_other_tabs)
+        self.sidebar.editorActivated.connect(self._activate_open_editor)
+        self.sidebar.editorClosed.connect(self._close_open_editor)
+        self.sidebar.closeOthers.connect(self._close_other_open_editors)
         self.sidebar.closeAllEditors.connect(self.close_all_tabs)
         self.sidebar.symbolActivated.connect(self._goto_line)
+        self.sidebar.variablePrint.connect(self._print_variable)
         self.sidebar.revisionActivated.connect(self.open_revision)
         self.sidebar.commitRequested.connect(self.open_commit)
         self.sidebar.runRequested.connect(self.run_path)
@@ -4675,9 +4918,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.welcome = qt.QLabel("Open a file from the Workspace, or use  File ▸ New / Open.")
         self.welcome.setAlignment(qt.Qt.AlignCenter)
         self.welcome.setObjectName("codeWelcome")
-        self.tabs = qt.QTabWidget()
-        self.tabs.setAttribute(qt.Qt.WA_StyledBackground, True)   # paint the strip past the last tab
         self._preview_page = None                    # the single tab shown in italic, if any
+        self._pinned = set()                         # pages kept left, without a close button
         self.recent = []                             # recently opened paths, newest first
         self.autosave = False                        # File > Auto Save
         self.word_wrap = False                       # View > Appearance > Word Wrap
@@ -4693,23 +4935,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         #                                              close+reopen, VS Code style; bounded LRU, see _cache_page
         # early: the tab callbacks built below already record into it
         self._session = session.Session(session_name, session_folder, session_enabled)
-        preview_bar = PreviewTabBar()
-        preview_bar.is_preview = lambda index: self.tabs.widget(index) is self._preview_page
-        self.tabs.setTabBar(preview_bar)
-        self.tabs.setTabsClosable(True)
-        self.tabs.setMovable(True)
-        self.tabs.setIconSize(qt.QSize(qt.px(20), qt.px(20)))   # bigger file-type icons on the tabs
-        # document mode makes the tab bar span the FULL width, so its background paints the whole strip
-        # (otherwise the bar stops after the last tab and the dark stack shows through)
-        self.tabs.setDocumentMode(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
         self._panel_sizes = {}                       # widget -> the extent it was last dragged to
         self._mru = []                               # open pages, most recently looked at first
-        self.tabs.currentChanged.connect(self._touch_mru)
-        self.tabs.currentChanged.connect(self._update_menu_targets)
-        self.tabs.currentChanged.connect(lambda *_: self._mark_location())
-        self.tabs.currentChanged.connect(self._refresh_side_views)
-        self.tabs.currentChanged.connect(self._refresh_open_editors)
 
         # problems follow the code: re-analysed on tab switch, and shortly after you stop typing
         self._problems_timer = qt.QTimer(self)
@@ -4718,9 +4945,20 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self._problems_timer.timeout.connect(lambda: self.problems.refresh())
         # the outline re-parses on the same pause as the problems: both cost one ast.parse
         self._problems_timer.timeout.connect(self._refresh_side_views)
-        self.tabs.currentChanged.connect(lambda *_: self._problems_timer.start())
-        self.stack.addWidget(self.welcome)      # index 0
-        self.stack.addWidget(self.tabs)         # index 1
+
+        # editor groups: one QTabWidget per split, laid out in a horizontal splitter. `self.tabs` is a
+        # property pointing at the ACTIVE group, so every single-group operation keeps working unchanged;
+        # only the enumerate-all sites go through _all_pages(). Split Right adds a second group.
+        self._groups = []
+        self.editor_split = qt.QSplitter(qt.Qt.Horizontal)
+        self.editor_split.setChildrenCollapsible(False)
+        self._active_group = self._make_group()
+        application = qt.QApplication.instance()
+        if application is not None:
+            application.focusChanged.connect(self._on_focus_changed)   # clicking a pane's body activates it
+
+        self.stack.addWidget(self.welcome)          # index 0
+        self.stack.addWidget(self.editor_split)     # index 1
         self.v_splitter.addWidget(self.stack)
 
         # Maya's log stream. It is read-only, so it is an OUTPUT channel, not a terminal: the interactive
@@ -4741,6 +4979,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.problems.countChanged.connect(self._problems_count_changed)
         self.problems.tallyChanged.connect(lambda e, w: self.status.set_tally(e, w))
         self.console = DebugConsole(self.namespace)
+        self.console.executed.connect(self._refresh_variables)
 
         self.panel = qt.QTabWidget()
         self.panel.setObjectName("codePanel")
@@ -4906,6 +5145,318 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     # ------------------------------------------------------------------ tabs
 
+    @property
+    def tabs(self):
+        """The active editor group (a QTabWidget). Single-group code keeps working unchanged.
+
+        Returns:
+            object: the currently focused editor group.
+        """
+        return self._active_group
+
+    def _make_group(self):
+        """Build one editor group (a QTabWidget), wired like the original single tab widget.
+
+        Returns:
+            object: the new group, already added to the editor splitter and the _groups list.
+        """
+        group = qt.QTabWidget()
+        group.setAttribute(qt.Qt.WA_StyledBackground, True)   # paint the strip past the last tab
+        bar = PreviewTabBar()
+        bar.is_preview = lambda index, g=group: g.widget(index) is self._preview_page
+        bar.is_pinned = lambda index, g=group: g.widget(index) in self._pinned
+        bar.mover = self._drop_tab
+        group.setTabBar(bar)
+        group.setTabsClosable(True)
+        group.setMovable(True)
+        group.setIconSize(qt.QSize(qt.px(20), qt.px(20)))
+        group.setDocumentMode(True)
+        group.tabCloseRequested.connect(lambda index, g=group: (self._set_active(g), self.close_tab(index)))
+        group.tabBarClicked.connect(lambda index, g=group: self._set_active(g))
+        group.currentChanged.connect(lambda index, g=group: self._on_group_current(g, index))
+        bar.setContextMenuPolicy(qt.Qt.CustomContextMenu)
+        bar.customContextMenuRequested.connect(lambda pos, g=group: (self._set_active(g), self._tab_context_menu(pos)))
+        self._groups.append(group)
+        self.editor_split.addWidget(group)
+        return group
+
+    def _set_active(self, group=None) -> None:
+        """Make `group` the active editor group that single-group operations target.
+
+        Args:
+            group: (object): - the editor group to activate.
+
+        Returns:
+            None.
+        """
+        if group is not None and group in self._groups:
+            self._active_group = group
+
+    def _on_group_current(self, group=None, index:int=None) -> None:
+        """React to a tab-switch inside `group`: activate it, then run the usual current-tab refreshes.
+
+        Args:
+            group: (object): - the group whose current tab changed.
+            index:    (int): - the newly selected tab index.
+
+        Returns:
+            None.
+        """
+        self._set_active(group)
+        self._touch_mru()
+        self._update_menu_targets()
+        self._mark_location()
+        self._refresh_side_views()
+        self._refresh_open_editors()
+        if getattr(self, "_problems_timer", None) is not None:
+            self._problems_timer.start()
+
+    def _all_pages(self) -> list:
+        """Every open page across all editor groups, in group then tab order.
+
+        Returns:
+            list: the pages held by every group.
+        """
+        return [group.widget(index) for group in self._groups for index in range(group.count())]
+
+    def _focus_page(self, page=None) -> bool:
+        """Activate the group that holds `page` and select it. Returns True when found.
+
+        Args:
+            page: (object): - the page to focus.
+
+        Returns:
+            bool: True when the page was found and focused.
+        """
+        for group in self._groups:
+            index = group.indexOf(page)
+            if index >= 0:
+                self._set_active(group)
+                group.setCurrentIndex(index)
+                return True
+        return False
+
+    def _group_index_of(self, page=None) -> int:
+        """The index of the pane holding `page`, or 0 when it is not found.
+
+        Args:
+            page: (object): - the page to locate.
+
+        Returns:
+            int: the pane index.
+        """
+        for position, group in enumerate(self._groups):
+            if group.indexOf(page) >= 0:
+                return position
+        return 0
+
+    def _split_right(self, index:int=None) -> None:
+        """Move the tab at `index` into a second editor group on the right, creating it when needed.
+
+        Args:
+            index: (int): - the tab in the active group to split off.
+
+        Returns:
+            None.
+        """
+        source = self._active_group
+        page = source.widget(index)
+        if page is None:
+            return
+        target = next((group for group in self._groups if group is not source), None) or self._make_group()
+        text, icon = source.tabText(index), source.tabIcon(index)
+        source.removeTab(index)
+        placed = target.addTab(page, icon, text)
+        self._set_active(target)
+        target.setCurrentIndex(placed)
+        self._collapse_empty_groups()
+        self._show_welcome_if_empty()
+
+    def _collapse_empty_groups(self) -> None:
+        """Remove any empty group beyond the first, so a closed split folds back to one pane.
+
+        Returns:
+            None.
+        """
+        for group in list(self._groups):
+            if len(self._groups) > 1 and group.count() == 0:
+                self._groups.remove(group)
+                group.setParent(None)
+                group.deleteLater()
+        if self._active_group not in self._groups:
+            self._active_group = self._groups[0]
+
+    def _drop_tab(self, source_bar=None, source_index:int=None, target_bar=None, drop_index:int=None) -> None:
+        """Move the tab dragged from `source_bar` into the pane owning `target_bar` at `drop_index`.
+
+        Args:
+            source_bar:   (object): - the tab bar the drag started on.
+            source_index:    (int): - the dragged tab's index in the source pane.
+            target_bar:   (object): - the tab bar dropped onto.
+            drop_index:      (int): - the position under the cursor (-1 to append).
+
+        Returns:
+            None.
+        """
+        source = next((group for group in self._groups if group.tabBar() is source_bar), None)
+        target = next((group for group in self._groups if group.tabBar() is target_bar), None)
+        if source is None or target is None or source_index < 0:
+            return
+        if source is target:
+            dest = max(0, min(drop_index, source.count() - 1)) if drop_index >= 0 else source.count() - 1
+            source.tabBar().moveTab(source_index, dest)
+            self._reconcile_pins(source)
+            return
+        page = source.widget(source_index)
+        text, icon = source.tabText(source_index), source.tabIcon(source_index)
+        source.removeTab(source_index)
+        placed = target.insertTab(drop_index, page, icon, text) if 0 <= drop_index <= target.count() \
+            else target.addTab(page, icon, text)
+        self._set_active(target)
+        target.setCurrentIndex(placed)
+        self._collapse_empty_groups()
+        self._show_welcome_if_empty()
+        for group in self._groups:
+            self._reconcile_pins(group)
+
+    def _is_pinned(self, page=None) -> bool:
+        """Whether `page` is a pinned tab.
+
+        Returns:
+            bool: True when the page is pinned.
+        """
+        return page in self._pinned
+
+    def _toggle_pin(self, index:int=None) -> None:
+        """Pin or unpin the tab at `index` in the active pane.
+
+        Args:
+            index: (int): - the tab to toggle.
+
+        Returns:
+            None.
+        """
+        page = self.tabs.widget(index)
+        if page is None:
+            return
+        self._pinned.discard(page) if page in self._pinned else self._pinned.add(page)
+        self._reconcile_pins(self.tabs)
+        self._refresh_open_editors()
+        self._touch_session()
+
+    def _unpin(self, page=None) -> None:
+        """Unpin `page` (used by its pin button) and reflow its pane.
+
+        Args:
+            page: (object): - the page to unpin.
+
+        Returns:
+            None.
+        """
+        self._pinned.discard(page)
+        for group in self._groups:
+            if group.indexOf(page) >= 0:
+                self._reconcile_pins(group)
+                break
+        self._refresh_open_editors()
+        self._touch_session()
+
+    def _reconcile_pins(self, group=None) -> None:
+        """Reorder `group` so pinned tabs sit first (their pin glyph is painted by the tab bar).
+
+        Args:
+            group: (object): - the pane to reflow.
+
+        Returns:
+            None.
+        """
+        if group is None or not qt.is_valid(group):
+            return
+        pinned = [group.widget(i) for i in range(group.count()) if group.widget(i) in self._pinned]
+        others = [group.widget(i) for i in range(group.count()) if group.widget(i) not in self._pinned]
+        for target_pos, page in enumerate(pinned + others):
+            current = group.indexOf(page)
+            if current >= 0 and current != target_pos:
+                group.tabBar().moveTab(current, target_pos)
+        group.tabBar().update()                       # repaint so the pin glyphs follow the new order
+
+    def _on_focus_changed(self, old=None, new=None) -> None:
+        """Activate the pane whose body just took focus (only matters once a split exists).
+
+        Args:
+            old: (object): - the widget that lost focus.
+            new: (object): - the widget that gained focus.
+
+        Returns:
+            None.
+        """
+        if new is None or len(getattr(self, "_groups", [])) < 2 or not qt.is_valid(self):
+            return
+        widget = new
+        while widget is not None:
+            if widget in self._groups:
+                self._set_active(widget)
+                return
+            widget = widget.parentWidget()
+
+    def _close_open_editor_page(self, page=None) -> None:
+        """Close `page` wherever it lives, activating its pane first.
+
+        Args:
+            page: (object): - the page to close.
+
+        Returns:
+            None.
+        """
+        for group in self._groups:
+            index = group.indexOf(page)
+            if index >= 0:
+                self._set_active(group)
+                self.close_tab(index)
+                return
+
+    def _activate_open_editor(self, flat:int=None) -> None:
+        """OPEN EDITORS click: focus the page at flat position `flat` across all panes.
+
+        Args:
+            flat: (int): - the position in the flat all-panes list.
+
+        Returns:
+            None.
+        """
+        pages = getattr(self, "_open_pages", [])
+        if 0 <= flat < len(pages):
+            self._focus_page(pages[flat])
+
+    def _close_open_editor(self, flat:int=None) -> None:
+        """OPEN EDITORS close: close the page at flat position `flat`.
+
+        Args:
+            flat: (int): - the position in the flat all-panes list.
+
+        Returns:
+            None.
+        """
+        pages = getattr(self, "_open_pages", [])
+        if 0 <= flat < len(pages):
+            self._close_open_editor_page(pages[flat])
+
+    def _close_other_open_editors(self, flat:int=None) -> None:
+        """OPEN EDITORS 'close others': keep the page at `flat`, close every other across all panes.
+
+        Args:
+            flat: (int): - the position of the page to keep.
+
+        Returns:
+            None.
+        """
+        pages = getattr(self, "_open_pages", [])
+        if not (0 <= flat < len(pages)):
+            return
+        keep = pages[flat]
+        for page in [candidate for candidate in self._all_pages() if candidate is not keep]:
+            self._close_open_editor_page(page)
+
     def current_page(self) -> "EditorPage":
         """The active EditorPage, or None.
 
@@ -4921,7 +5472,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         Returns:
             None.
         """
-        self.stack.setCurrentIndex(1 if self.tabs.count() else 0)
+        self.stack.setCurrentIndex(1 if self._all_pages() else 0)
 
     def _new_editor_page(self, path:str=None) -> "EditorPage":
         """An EditorPage with every window-level signal already wired.
@@ -4983,11 +5534,10 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             return
 
         # already open: focus it, and pin it when this was a real open
-        for i in range(self.tabs.count()):
-            page = self.tabs.widget(i)
+        for page in self._all_pages():
             if isinstance(page, (EditorPage, ImagePage)) and page.file_path \
                     and os.path.normpath(page.file_path) == os.path.normpath(path):
-                self.tabs.setCurrentIndex(i)
+                self._focus_page(page)
                 if not preview and self._preview_page is page:
                     self._preview_page = None
                     self.tabs.tabBar().update()
@@ -5153,8 +5703,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             None.
         """
         saved = 0
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
+        for page in self._all_pages():
             if isinstance(page, EditorPage) and page.file_path and page.is_modified():
                 saved += bool(page.save())
                 self._refresh_tab_title(page)
@@ -5249,8 +5798,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         """
         target = os.path.normpath(old)
         self._drop_cached_page(old)                   # a closed-tab undo cache under the old name is stale now
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
+        for page in self._all_pages():
             path = getattr(page, "file_path", None)
             if not path or os.path.normpath(path) != target:
                 continue
@@ -5276,18 +5824,20 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                 self._page_cache_order.remove(key)
                 if entry is not None:
                     entry[0].deleteLater()
-        for index in reversed(range(self.tabs.count())):
-            page = self.tabs.widget(index)
-            open_path = getattr(page, "file_path", None)
-            if not open_path:
-                continue
-            normalised = os.path.normpath(open_path)
-            if normalised == target or normalised.startswith(target + os.sep):
-                self._session.discard(self._page_key(page))
-                if self._preview_page is page:
-                    self._preview_page = None
-                self.tabs.removeTab(index)      # not close_tab: asking to save a deleted file is absurd
-                page.deleteLater()
+        for group in list(self._groups):
+            for index in reversed(range(group.count())):
+                page = group.widget(index)
+                open_path = getattr(page, "file_path", None)
+                if not open_path:
+                    continue
+                normalised = os.path.normpath(open_path)
+                if normalised == target or normalised.startswith(target + os.sep):
+                    self._session.discard(self._page_key(page))
+                    if self._preview_page is page:
+                        self._preview_page = None
+                    group.removeTab(index)      # not close_tab: asking to save a deleted file is absurd
+                    page.deleteLater()
+        self._collapse_empty_groups()
         self._show_welcome_if_empty()
         self._store_session()
 
@@ -5424,9 +5974,11 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             self._closed.append((path, line))
             del self._closed[:-20]                    # a short history is enough, and bounded
         self._session.discard(self._page_key(page))   # closed on purpose: nothing left to recover
+        self._pinned.discard(page)
         self.tabs.removeTab(index)
         if not self._cache_page(page):                # kept alive for its undo history, or...
             page.deleteLater()                        # ...a dirty/untitled page really goes away
+        self._collapse_empty_groups()                 # a split that just emptied folds back to one pane
         self._show_welcome_if_empty()
         self._refresh_open_editors()
         self._store_session()                         # immediate: a close must not be lost to the delay
@@ -5632,9 +6184,10 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         if store is None:
             return
         tabs, keep = [], set()
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
-            entry = {"preview": page is self._preview_page}
+        active_page = self.tabs.currentWidget()
+        for page in self._all_pages():
+            entry = {"preview": page is self._preview_page, "group": self._group_index_of(page),
+                     "pinned": page in self._pinned}
             if isinstance(page, EditorPage):
                 cursor = page.code.textCursor()
                 entry.update(kind="editor", path=page.file_path,
@@ -5657,7 +6210,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             else:
                 continue
             tabs.append(entry)
-        data = {"version": 1, "active": self.tabs.currentIndex(), "tabs": tabs,
+        pages = self._all_pages()
+        data = {"version": 1, "active": pages.index(active_page) if active_page in pages else -1, "tabs": tabs,
                 "recent": self.recent, "autosave": self.autosave, "wrap": self.word_wrap,
                 "layout": self._layout_state()}
         store.save(data)
@@ -5704,18 +6258,26 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
                 self._restore_tab(entry)
             except Exception:
                 continue                                  # one unreadable entry must not stop the rest
+        self._collapse_empty_groups()                     # drop a pane the session recreated but left empty
+        for group in self._groups:
+            self._reconcile_pins(group)                   # restore the pinned lane + strip their close button
         active = data.get("active", -1)
-        if isinstance(active, int) and 0 <= active < self.tabs.count():
-            self.tabs.setCurrentIndex(active)
+        pages = self._all_pages()
+        if isinstance(active, int) and 0 <= active < len(pages):
+            self._focus_page(pages[active])
         self._show_welcome_if_empty()
         self.tabs.tabBar().update()
 
     def _restore_tab(self, entry:dict) -> None:
-        """Rebuild one tab from its session entry.
+        """Rebuild one tab from its session entry, into the pane it was saved from.
 
         Returns:
             None.
         """
+        group_index = int(entry.get("group", 0) or 0)
+        while len(self._groups) <= group_index:
+            self._make_group()                            # recreate the split the session was saved with
+        self._set_active(self._groups[group_index])
         kind, path, preview = entry.get("kind"), entry.get("path"), bool(entry.get("preview"))
 
         if kind == "diff":
@@ -5750,6 +6312,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         cursor.movePosition(qt.QTextCursor.Down, qt.QTextCursor.MoveAnchor, int(entry.get("line") or 0))
         cursor.movePosition(qt.QTextCursor.Right, qt.QTextCursor.MoveAnchor, int(entry.get("column") or 0))
         page.code.setTextCursor(cursor)
+        if entry.get("pinned"):
+            self._pinned.add(page)
 
     def closeEvent(self, event) -> None:
         """Flush the session on the way out, so a close never costs the layout or unsaved work.
@@ -6026,10 +6590,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         try:
             page = self.current_page()
             path = getattr(self.tabs.currentWidget(), "file_path", None)
-            modified = any(isinstance(self.tabs.widget(i), EditorPage)
-                           and self.tabs.widget(i).file_path
-                           and self.tabs.widget(i).is_modified()
-                           for i in range(self.tabs.count()))
+            modified = any(isinstance(page, EditorPage) and page.file_path and page.is_modified()
+                           for page in self._all_pages())
             self.action_save.setEnabled(page is not None)
             self.action_save_as.setEnabled(page is not None)
             self.action_save_all.setEnabled(modified)
@@ -6232,16 +6794,21 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         """
         if not self.sidebar.open_section.is_expanded():
             return                               # collapsed: nothing to keep in step
-        entries = []
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
-            path = getattr(page, "file_path", None) or ""
-            name = os.path.basename(path) or self.tabs.tabText(index).lstrip("● ")
-            modified = isinstance(page, EditorPage) and page.is_modified()
-            entries.append((index, self.tabs.tabIcon(index), name,
-                            os.path.basename(os.path.dirname(path)) if path else "",
-                            modified, page is self._preview_page))
-        self.sidebar.open_editors.set_editors(entries, self.tabs.currentIndex())
+        entries, self._open_pages, current = [], [], -1
+        active_page = self.tabs.currentWidget()
+        for group in self._groups:
+            for index in range(group.count()):
+                page = group.widget(index)
+                path = getattr(page, "file_path", None) or ""
+                name = os.path.basename(path) or group.tabText(index).lstrip("● ")
+                modified = isinstance(page, EditorPage) and page.is_modified()
+                if page is active_page:
+                    current = len(self._open_pages)
+                entries.append((len(self._open_pages), group.tabIcon(index), name,
+                                os.path.basename(os.path.dirname(path)) if path else "",
+                                modified, page is self._preview_page))
+                self._open_pages.append(page)
+        self.sidebar.open_editors.set_editors(entries, current)
         self.sidebar.open_section.refresh_height()   # the list just changed height
 
     def _close_other_tabs(self, keep:int) -> None:
@@ -6252,8 +6819,177 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         """
         page = self.tabs.widget(keep)
         for index in reversed(range(self.tabs.count())):
-            if self.tabs.widget(index) is not page:
+            if self.tabs.widget(index) is not page and self.tabs.widget(index) not in self._pinned:
                 self.close_tab(index)
+
+    def _tab_context_menu(self, position=None) -> None:
+        """Right-click menu on a tab: close group, copy path variants, reveal, side-bar select, save.
+
+        Args:
+            position: (object): - local position on the tab bar where the menu was requested.
+
+        Returns:
+            None.
+        """
+        bar   = self.tabs.tabBar()
+        index = bar.tabAt(position)
+        if index < 0:
+            return
+        page    = self.tabs.widget(index)
+        path    = getattr(page, "file_path", None)
+        count   = self.tabs.count()
+        on_disk = bool(path) and os.path.exists(path)
+
+        editable = isinstance(page, EditorPage)
+
+        menu = qt.QMenu(self)
+        if self._preview_page is page:                                          # a preview (italic) tab
+            menu.addAction("Keep Open", lambda: self._keep_tab_open(index))
+            menu.addSeparator()
+        menu.addAction("Unpin" if self._is_pinned(page) else "Pin", lambda: self._toggle_pin(index))
+        menu.addSeparator()
+        menu.addAction("Close", lambda: self.close_tab(index))
+        action = menu.addAction("Close Other Tabs", lambda: self._close_other_tabs(index))
+        action.setEnabled(count > 1)
+        action = menu.addAction("Close Tabs to the Left", lambda: self._close_tabs_to_left(index))
+        action.setEnabled(index > 0)
+        action = menu.addAction("Close Tabs to the Right", lambda: self._close_tabs_to_right(index))
+        action.setEnabled(index < count - 1)
+        menu.addAction("Close Saved Tabs", self._close_saved_tabs)
+        menu.addAction("Close All Tabs", self.close_all_tabs)
+        menu.addSeparator()
+        action = menu.addAction("Split Right", lambda: self._split_right(index))
+        action.setEnabled(count > 1 or len(self._groups) > 1)
+        menu.addSeparator()
+        for label, value in (("Copy Path", os.path.normpath(path) if path else None),
+                             ("Copy Relative Path", self._relative_path(path)),
+                             ("Copy File Name", os.path.basename(path) if path else None),
+                             ("Copy Directory Path", os.path.dirname(path) if path else None)):
+            action = menu.addAction(label, lambda text=value: compat.copy(text))
+            action.setEnabled(bool(value))
+        menu.addSeparator()
+        action = menu.addAction("Reveal in File Explorer", lambda: self.reveal_path(path))
+        action.setEnabled(on_disk)
+        action = menu.addAction("Select in Side Bar", lambda: self._select_in_sidebar(path))
+        action.setEnabled(on_disk)
+        menu.addSeparator()
+        action = menu.addAction("Compare with Saved", lambda: self._compare_with_saved(index))
+        action.setEnabled(editable and on_disk)
+        action = menu.addAction("Save", lambda: (self.tabs.setCurrentIndex(index), self.save_file()))
+        action.setEnabled(editable and page.is_modified())
+        menu.addAction("Save All", self.save_all)
+        action = menu.addAction("Reopen Closed Tab", self.reopen_closed)
+        action.setEnabled(bool(self._closed))
+        menu.exec_(bar.mapToGlobal(position))
+
+    def _close_tabs_to_right(self, index:int=None) -> None:
+        """Close every tab positioned after `index`, from the end so indexes stay valid.
+
+        Args:
+            index: (int): - the tab whose right-hand neighbours are closed.
+
+        Returns:
+            None.
+        """
+        for other in reversed(range(index + 1, self.tabs.count())):
+            if self.tabs.widget(other) not in self._pinned:
+                self.close_tab(other)
+
+    def _close_tabs_to_left(self, index:int=None) -> None:
+        """Close every tab positioned before `index`, from the end so `index` stays valid.
+
+        Args:
+            index: (int): - the tab whose left-hand neighbours are closed.
+
+        Returns:
+            None.
+        """
+        for other in reversed(range(index)):
+            if self.tabs.widget(other) not in self._pinned:
+                self.close_tab(other)
+
+    def _keep_tab_open(self, index:int=None) -> None:
+        """Promote a preview (italic) tab to a permanent one, like a double click does.
+
+        Args:
+            index: (int): - the tab to keep open.
+
+        Returns:
+            None.
+        """
+        if self._preview_page is self.tabs.widget(index):
+            self._preview_page = None
+            self.tabs.tabBar().update()
+
+    def _compare_with_saved(self, index:int=None) -> None:
+        """Open a side-by-side diff of a tab's editor content against its file on disk.
+
+        Args:
+            index: (int): - the editor tab to compare.
+
+        Returns:
+            None.
+        """
+        page = self.tabs.widget(index)
+        path = getattr(page, "file_path", None)
+        if not (isinstance(page, EditorPage) and path and os.path.isfile(path)):
+            return
+        old_text, new_text = compat.folder.read(path), page.code.toPlainText()
+        label = "%s (Saved)" % os.path.basename(path)
+        for other in range(self.tabs.count()):
+            diff = self.tabs.widget(other)
+            if isinstance(diff, DiffPage) and diff.file_path == path and diff.name() == label:
+                self.tabs.setCurrentIndex(other)
+                return
+        self._place_tab(DiffPage(path, old_text, new_text, title=label), file_icon(path), label, preview=True)
+
+    def _close_saved_tabs(self) -> None:
+        """Close every tab that has no unsaved changes.
+
+        Returns:
+            None.
+        """
+        for index in reversed(range(self.tabs.count())):
+            page = self.tabs.widget(index)
+            if page not in self._pinned and not (isinstance(page, EditorPage) and page.is_modified()):
+                self.close_tab(index)
+
+    def _relative_path(self, path:str=None) -> str:
+        """Return `path` relative to its nearest workspace root, or None when it has none.
+
+        Args:
+            path: (str): - the absolute file path to shorten.
+
+        Returns:
+            str: the path relative to a workspace root (forward slashes), or None.
+        """
+        if not path:
+            return None
+        for root in self.sidebar.workspace.roots:
+            try:
+                relative = os.path.relpath(path, root)
+            except ValueError:
+                continue
+            if not relative.startswith(".."):
+                return relative.replace("\\", "/")
+        return None
+
+    def _select_in_sidebar(self, path:str=None) -> None:
+        """Show the Explorer view and select `path` in the workspace tree.
+
+        Args:
+            path: (str): - the file path to reveal in the side bar.
+
+        Returns:
+            None.
+        """
+        if not path:
+            return
+        try:
+            self.sidebar.select("explorer")
+        except Exception:
+            pass
+        self.sidebar.workspace._select_path(path)
 
     def _first_scan(self) -> None:
         """The initial git read, once the window exists. Runs in both chrome modes.
@@ -6291,6 +7027,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
         if self.sidebar.outline_section.is_expanded():
             self.sidebar.outline.set_source(path, source)
+        self._refresh_variables()                          # cheap, and the namespace is shared across tabs
         if path != getattr(self, "_side_path", None):
             # the folder changed, so the branch may have: this is the only place git is asked
             self._side_path = path
@@ -6434,6 +7171,33 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     # ------------------------------------------------------------------ slots
 
+    def _refresh_variables(self) -> None:
+        """Repopulate the Variables panel from the shared run namespace.
+
+        Returns:
+            None.
+        """
+        panel = getattr(self.sidebar, "variables", None)
+        if panel is not None and qt.is_valid(panel):
+            panel.refresh(self.namespace)
+
+    def _print_variable(self, name:str=None) -> None:
+        """Echo a namespace global's full repr to the output (Variables panel double click).
+
+        Args:
+            name: (str): - the global's name.
+
+        Returns:
+            None.
+        """
+        if not name or name not in self.namespace:
+            return
+        try:
+            text = repr(self.namespace[name])
+        except Exception:
+            text = "<unrepresentable>"
+        sys.stdout.write("%s = %s\n" % (name, text))
+
     def _run_selection(self) -> None:
         """Run selection.
 
@@ -6447,6 +7211,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             page.code.run()
         else:
             page.code.execute(page.code.toPlainText())
+        self._refresh_variables()
 
     def _run_all(self) -> None:
         """Run all.
@@ -6457,6 +7222,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         page = self.current_page()
         if page is not None:
             page.code.execute(page.code.toPlainText())
+            self._refresh_variables()
 
     # ------------------------------------------------------------------ layout toggles
 
@@ -6566,8 +7332,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             list: the (path, source) pairs for every open editor tab.
         """
         sources = []
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
+        for page in self._all_pages():
             if isinstance(page, EditorPage):
                 sources.append((page.file_path or "untitled.py", page.code.toPlainText()))
         return sources
@@ -6713,8 +7478,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             None.
         """
         on = self.secondary.isVisibleTo(self)
-        for index in range(self.tabs.count()):
-            code = getattr(self.tabs.widget(index), "code", None)
+        for page in self._all_pages():
+            code = getattr(page, "code", None)
             if code is not None:
                 code.argument_completion = on
 
@@ -6813,13 +7578,16 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
             if qt.is_valid(action):
                 self.editors_menu.removeAction(action)
         self._editor_entries = []
-        if self.tabs.count():
+        pages = self._all_pages()
+        if pages:
             self._editor_entries.append(self.editors_menu.addSeparator())
-        for index in range(self.tabs.count()):
-            action = self.editors_menu.addAction(self.tabs.tabText(index))
-            action.setIcon(self.tabs.tabIcon(index))
-            action.triggered.connect(lambda *_, i=index: self.tabs.setCurrentIndex(i))
-            self._editor_entries.append(action)
+        for group in self._groups:
+            for index in range(group.count()):
+                page = group.widget(index)
+                action = self.editors_menu.addAction(group.tabText(index))
+                action.setIcon(group.tabIcon(index))
+                action.triggered.connect(lambda *_, p=page: self._focus_page(p))
+                self._editor_entries.append(action)
 
     def goto_file(self) -> None:
         """Quick-open: every file under the workspace roots, filtered as you type.
@@ -6993,8 +7761,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         """
         self.word_wrap = (not self.word_wrap) if on is None else bool(on)
         mode = qt.QPlainTextEdit.WidgetWidth if self.word_wrap else qt.QPlainTextEdit.NoWrap
-        for index in range(self.tabs.count()):
-            code = getattr(self.tabs.widget(index), "code", None)
+        for page in self._all_pages():
+            code = getattr(page, "code", None)
             if code is not None:
                 code.setLineWrapMode(mode)
         self._touch_session()
@@ -7046,8 +7814,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         action = getattr(self, "action_sticky", None)
         if action is not None and action.isChecked() != self.sticky_on:
             action.setChecked(self.sticky_on)    # keep the View tick and the gear menu agreeing
-        for index in range(self.tabs.count()):
-            code = getattr(self.tabs.widget(index), "code", None)
+        for page in self._all_pages():
+            code = getattr(page, "code", None)
             if code is None:
                 continue
             code.sticky_scroll = self.sticky_on
@@ -7065,8 +7833,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         action = getattr(self, "action_minimap", None)
         if action is not None and action.isChecked() != self.minimap_on:
             action.setChecked(self.minimap_on)   # keep the View tick and the gear menu agreeing
-        for index in range(self.tabs.count()):
-            page = self.tabs.widget(index)
+        for page in self._all_pages():
             strip = getattr(getattr(page, "code", None), "minimap", None)
             if strip is None:
                 continue
@@ -7140,8 +7907,8 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         self.theme = qt.theme(name)
         self.setStyleSheet(qt.stylesheet(name))
         self._apply_theme()
-        for index in range(self.tabs.count()):
-            code = getattr(self.tabs.widget(index), "code", None)
+        for page in self._all_pages():
+            code = getattr(page, "code", None)
             if code is not None:
                 code.surface = self.theme["editor"]
                 code.palette_theme = self.theme     # the completion popup repaints from this

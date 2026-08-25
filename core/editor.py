@@ -538,6 +538,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._gutter_hover = False
         self._changes = []                     # git hunks: [(first, last, kind, old_lines)]
         self._hunk_popup = None                # the inline diff bubble, at most one at a time
+        self._inline = {}                      # {block number: repr} of run-expression results, drawn at line end
         self.extra_cursors = []                # secondary carets; the primary is textCursor()
         self._column_from = None               # Alt press waiting to become a caret or a column
         self._column_moved = False
@@ -593,6 +594,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self._lint_timer.setSingleShot(True)
         self._lint_timer.timeout.connect(self._run_lint)
         self.textChanged.connect(lambda: self._lint_timer.start(500))
+        self.textChanged.connect(self._clear_inline)    # an edit shifts line numbers: drop inline results
 
         # the fold arrows are hit-tested in the gutter, so it has to report the pointer moving
         self.line_numbers.setMouseTracking(True)
@@ -760,6 +762,17 @@ class CodeTextEdit(qt.QPlainTextEdit):
                     indentation_x = block_rect.left() + i * space_width
                     painter.drawLine(indentation_x, block_rect.top(), indentation_x, block_rect.bottom())
                     
+                if self._inline and block.blockNumber() in self._inline:   # run-expression result, at line end
+                    painter.save()
+                    painter.setPen(qt.QColor(120, 120, 120))
+                    inline_font = qt.QFont(self.font())
+                    inline_font.setItalic(True)
+                    painter.setFont(inline_font)
+                    end_x = block_rect.left() + self.fontMetrics().horizontalAdvance(block_text)
+                    baseline = int(block_rect.top() + self.fontMetrics().ascent())
+                    painter.drawText(int(end_x + qt.px(24)), baseline, "→  " + self._inline[block.blockNumber()])
+                    painter.restore()
+
             block = block.next()
 
         painter.end()
@@ -2495,15 +2508,46 @@ class CodeTextEdit(qt.QPlainTextEdit):
             self.update_number_width()
 
 
-    def execute(self, text:str=None) -> None:
+    def _clear_inline(self) -> None:
+        """Drop every inline result (an edit has shifted the line numbers they hang on).
+
+        Returns:
+            None.
+        """
+        if self._inline:
+            self._inline = {}
+            self.viewport().update()
+
+    def _set_inline(self, block:int=None, value:object=None) -> None:
+        """Store a run result to draw at the end of line `block`, capped to one short line.
+
+        Args:
+            block: (int):    - 0-based line number the result hangs on.
+            value: (object): - the evaluated value.
+
+        Returns:
+            None.
+        """
+        try:
+            text = repr(value).replace("\n", " ")
+        except Exception:
+            text = "<unrepresentable>"
+        if len(text) > 120:
+            text = text[:120] + "…"
+        self._inline[block] = text
+        self.viewport().update()
+
+    def execute(self, text:str=None, at_block:int=None) -> None:
         """Compile and run `text` as Python in the shared console namespace, safely.
 
         User code runs in CONSOLE_NAMESPACE (never this module's globals), so it cannot corrupt the
         editor. Compile errors and runtime exceptions are caught and printed as a clean traceback instead of
-        propagating out of a Qt event handler (which would be swallowed or destabilise the UI).
+        propagating out of a Qt event handler (which would be swallowed or destabilise the UI). When the
+        source is a single expression and `at_block` is given, its value is shown inline at that line's end.
 
         Args:
-            text: (str): - the Python source to execute.
+            text:      (str): - the Python source to execute.
+            at_block:  (int): - the 0-based line the inline result hangs on (None = no inline, statements).
 
         Returns:
             None.
@@ -2512,6 +2556,29 @@ class CodeTextEdit(qt.QPlainTextEdit):
             return
         # echo the executed code to the output (like Maya's script editor shows the command it ran)
         sys.stdout.write(text if text.endswith("\n") else text + "\n")
+
+        expression = None
+        if at_block is not None:
+            try:
+                expression = compile(text, "<the host>", "eval")   # a single expression -> show its value inline
+            except SyntaxError:
+                expression = None
+
+        def _report() -> None:
+            """Print the user's traceback, skipping this frame so it starts at their code."""
+            exc_type, exc_value, exc_tb = sys.exc_info()
+            user_tb = exc_tb.tb_next if exc_tb is not None else exc_tb
+            sys.stderr.write("".join(traceback.format_exception(exc_type, exc_value, user_tb)))
+
+        if expression is not None:
+            try:
+                value = eval(expression, self.namespace)
+                if value is not None:
+                    self._set_inline(at_block, value)
+            except Exception:
+                _report()
+            return
+
         try:
             code = compile(text, "<the host>", "exec")
         except SyntaxError:
@@ -2520,18 +2587,18 @@ class CodeTextEdit(qt.QPlainTextEdit):
         try:
             exec(code, self.namespace)
         except Exception:
-            # skip this frame (execute) so the traceback starts at the user's code, not editor.py
-            exc_type, exc_value, exc_tb = sys.exc_info()
-            user_tb = exc_tb.tb_next if exc_tb is not None else exc_tb
-            sys.stderr.write("".join(traceback.format_exception(exc_type, exc_value, user_tb)))
+            _report()
 
     def run(self) -> None:
-        """Execute the currently selected text as Python.
+        """Execute the currently selected text as Python, showing an expression's value inline.
 
         Returns:
             None.
         """
-        self.execute(self.textCursor().selection().toPlainText())
+        cursor = self.textCursor()
+        end_block = self.document().findBlock(cursor.selectionEnd()).blockNumber() if cursor.hasSelection() \
+            else cursor.blockNumber()
+        self.execute(cursor.selection().toPlainText(), at_block=end_block)
 
     
     FONT_OPTIONVAR = "code_editor_font_size"     # persisted editor font size (Maya optionVar)

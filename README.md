@@ -80,6 +80,9 @@ main.install_menu(menu=None, before=None)    # at the bottom of the Windows menu
 | Multi-document (tabs) | ✓ | ✓ |
 | Preview tabs (single click opens, replaces) | ✓ | |
 | Movable tabs | ✓ | ✓ |
+| Split editors side by side | ✓ | |
+| Pinned tabs | ✓ | |
+| Compare a tab with its saved version | ✓ | |
 | Open editors list | ✓ | |
 | Workspace file tree | ✓ | |
 | Breadcrumbs with folder drop-downs | ✓ | |
@@ -187,6 +190,8 @@ main.install_menu(menu=None, before=None)    # at the bottom of the Windows menu
 | Run all | ✓ | ✓ |
 | Run selection | ✓ | ✓ |
 | Run current line | ✓ | |
+| Inline result at the end of the line | ✓ | |
+| Variables panel (live namespace inspector) | ✓ | |
 | Never deletes the code on execute | ✓ | ✓ |
 | Save to shelf | ✓ | ✓ |
 | Maya command echo | ✓ | ✓ |
