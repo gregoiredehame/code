@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Aug 01, 2026
+Modified: Aug 26, 2026
 Module: code_editor.manager.tabs
 Execute: from code_editor.manager import tabs
 """
@@ -297,6 +297,39 @@ class TabWidget(qt.QTabWidget):
         except Exception:
             pass
 
+    @staticmethod
+    def _is_referenced_code(file_path:str=None) -> bool:
+        """True when a code file is a kata reference: its folder carries a code_reference marker, or it is locked
+        read-only (references are OS read-only, editable only in their source krig).
+
+        Args:
+            file_path: (str): - the absolute code file path backing a tab.
+
+        Returns:
+            bool: True when the code is a read-only reference.
+        """
+        if not (file_path and os.path.isfile(file_path)):
+            return False
+        if os.path.isfile(os.path.join(os.path.dirname(file_path), "code_reference")):
+            return True
+        return not os.access(file_path, os.W_OK)
+
+    def _mark_reference_tab(self, index:int=None, file_path:str=None) -> None:
+        """Colour a tab's title blue when its code is a reference (read-only, synced from another krig).
+
+        Args:
+            index:     (int): - the tab index.
+            file_path: (str): - the code file backing that tab.
+
+        Returns:
+            None.
+        """
+        if index is None or index < 0:
+            return
+        if self._is_referenced_code(file_path):
+            self.tabBar().setTabTextColor(index, qt.QColor(90, 150, 230))
+            self.setTabToolTip(index, "Reference (read-only, synced from its source krig)")
+
     def open_temp(self, file_temp:str=None) -> None:
         """Reopen a tab from a stored temporary file recorded in the workspace.
 
@@ -318,6 +351,7 @@ class TabWidget(qt.QTabWidget):
             code_widget.text_has_been_changed.connect(lambda message: self.compare_code(message, file_path=file_path_abs, file_temp=file_temp_abs))
             code_widget.savingScript.connect(lambda x: self.save_code(x, file_path=file_path_abs, file_temp=file_temp_abs))
             self.addTab(code_widget, self.icon_from_path(file_temp_abs), file_name)
+            self._mark_reference_tab(self.count() - 1, file_path_abs)
             self.setVisible(True)
             self.setCurrentIndex(self.count() -1)
 
@@ -352,6 +386,7 @@ class TabWidget(qt.QTabWidget):
                     code_widget.text_has_been_changed.connect(lambda message: self.compare_code(message, file_path=file_path, file_temp=file_temp))
                     code_widget.savingScript.connect(lambda x: self.save_code(x, file_path=file_path, file_temp=file_temp))
                     self.addTab(code_widget, self.icon_from_path(file_temp), file_name)
+                    self._mark_reference_tab(self.count() - 1, file_path)
                     self.setVisible(True)
                     self.setCurrentIndex(self.count() -1)
 

@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Modified: Aug 19, 2026
+Modified: Aug 26, 2026
 Module: code_editor.window
 Execute: from code_editor import window
 
@@ -386,6 +386,10 @@ class EditorPage(qt.QWidget):
         self.code = editor_module.CodeTextEdit(file_path=file_path, namespace=namespace,
                                                minimap=True, surface=surface, palette=palette)
         self.code.set_completer(editor_module.CodeCompleter)
+        # a reference data's .py is OS-locked read-only (edit it in the source krig): open it read-only here too,
+        # so it shows greyed / non-editable and matches the file lock instead of failing only on save.
+        if file_path and os.path.isfile(file_path) and not os.access(file_path, os.W_OK):
+            self.code.setReadOnly(True)
         # the engine only knows python and mel; swap in a rule highlighter for the other languages
         extra = languages.rules_for(os.path.splitext(file_path or "")[1])[0]
         if extra:
@@ -637,10 +641,12 @@ class PreviewTabBar(qt.QTabBar):
                                              size.width(), size.height()))
                 left += size.width() + qt.px(self.SPACING)
 
-            # stop the text before the close cross, which is a real widget the style lays out
-            button = self.tabButton(index, qt.QTabBar.RightSide)
-            right = button.x() - qt.px(4) if button is not None and button.isVisible() \
-                else rect.right() - qt.px(self.RIGHT)
+            # stop the text before the close cross. Do NOT query tabButton() here: during a repaint that races
+            # a tab close / reorder its wrapper can dangle, and reading it hard-crashes Maya (shiboken AV). Just
+            # reserve a fixed slot for the cross when the bar is closable.
+            right = rect.right() - qt.px(self.RIGHT)
+            if self.tabsClosable():
+                right -= qt.px(18)
 
             font = qt.QFont(self.font())
             font.setItalic(bool(self.is_preview(index)))
