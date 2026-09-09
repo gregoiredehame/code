@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Oct 27, 2023
-Modified: Aug 01, 2026
+Modified: Sep 06, 2026
 Module: code_editor.core.editor
 Execute: from code_editor.core import editor
 """
@@ -583,6 +583,7 @@ class CodeTextEdit(qt.QPlainTextEdit):
             self.textChanged.connect(self.minimap.update)
             self.verticalScrollBar().valueChanged.connect(self.minimap.update)
         self.cursorPositionChanged.connect(self.line_number_highlight)
+        self.cursorPositionChanged.connect(self.auto_scroll_left)
         self.code_text_size_changed.connect(self.code_text_size_change)
         self.line_number_highlight()
         self.completer = None
@@ -2051,6 +2052,20 @@ class CodeTextEdit(qt.QPlainTextEdit):
         self.viewport().update()
 
 
+    def auto_scroll_left(self) -> None:
+        """Snap the horizontal scroll back to the left edge when the caret lands in the left part of the
+        document (a new line, Home, an indent), so a long line never leaves the next line start off-screen.
+
+        Returns:
+            None.
+        """
+        scrollbar = self.horizontalScrollBar()
+        if scrollbar.value() <= 0:
+            return
+        document_x = self.cursorRect().left() + scrollbar.value()
+        if document_x < self.viewport().width() * 0.6:
+            scrollbar.setValue(0)
+
     def wheelEvent(self, event) -> None:
         """Zoom the text on Ctrl+wheel, otherwise scroll normally.
 
@@ -2068,7 +2083,8 @@ class CodeTextEdit(qt.QPlainTextEdit):
             dy = event.delta()
 
         control_modifier = getattr(qt.Qt, "ControlModifier", getattr(qt.Qt, "CTRL"))
-        if event.modifiers() & control_modifier:
+        # some Maya / PySide combinations deliver EMPTY modifiers on wheel events: read the keyboard too
+        if (event.modifiers() | qt.QApplication.keyboardModifiers()) & control_modifier:
             if dy > 0:
                 self.zoom_in_text()
                 event.accept()
@@ -3620,14 +3636,39 @@ class CodeCompleter(qt.QCompleter):
         prefix = expression.rsplit(".", 1)[-1] if "." in expression else expression
         if "." in expression:
             arguments = []                             # typing a dotted name, not an argument
-        elif len(expression) < 2 and not arguments:
+        documents = [] if "." in expression else self._document_matches(widget, prefix)
+        if "." not in expression and len(expression) < 2 and not arguments and not documents:
             return False                               # don't pop up on a single leading char
 
         matches = sorted(set((name, kind) for name, kind in self._completions(expression)
                              if name.lower().startswith(prefix.lower())))
         # arguments win a name clash: inside a call, `name` means the parameter, not some global
         taken = {name for name, _kind in arguments}
-        return self._offer(arguments + [(n, k) for n, k in matches if n not in taken], prefix)
+        combined = arguments + [(n, k) for n, k in matches if n not in taken]
+        # document identifiers (variables typed but not executed yet) come last, deduplicated
+        taken |= {name for name, _kind in combined}
+        combined += [(n, k) for n, k in documents if n not in taken]
+        return self._offer(combined, prefix)
+
+    def _document_matches(self, widget, prefix:str) -> list:
+        """Identifiers present in the DOCUMENT itself, so a variable is offered before the code ever ran.
+
+        Typing `test = 10` then `print(te` proposes `test`: these names come from the text; the live
+        namespace stays the authority for kinds and dotted access.
+
+        Args:
+            widget: (object): - the editor widget.
+            prefix:    (str): - the typed prefix to filter on.
+
+        Returns:
+            list: [(name, "variable")] sorted document identifiers matching the prefix.
+        """
+        if not prefix:
+            return []
+        low = prefix.lower()
+        names = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", widget.toPlainText()))
+        return sorted((name, "variable") for name in names
+                      if name.lower().startswith(low) and name != prefix and not name.startswith("__"))
 
     def _offer(self, matches:list, prefix:str) -> bool:
         """Put [(name, kind)] in the popup, in the order given. False when there is nothing.

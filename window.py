@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Modified: Aug 26, 2026
+Modified: Sep 08, 2026
 Module: code_editor.window
 Execute: from code_editor import window
 
@@ -4833,7 +4833,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     window_instance = None
     title           = "Code Editor"
-    version         = "0.2.0"
+    version         = "0.2.2"
 
     sessionStored = qt.signal(object)      # the layout that was just written, for embedders to mirror
 
