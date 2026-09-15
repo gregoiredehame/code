@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Aug 24, 2026
+Modified: Sep 15, 2026
 Module: code_editor
 Execute: import code_editor
 
@@ -95,8 +95,8 @@ def reload_stack(verbose:bool=True) -> None:
     # reaches outside it, so a standalone install has nothing for it to import - and a missing
     # bridge must not stop the editor itself from reloading.
     try:
-        from .manager import workspace, panel
-        modules += [workspace, panel]
+        from .manager import workspace, tabs, panel
+        modules += [workspace, tabs, panel]        # tabs before panel, which builds them
     except ImportError:
         pass
 
