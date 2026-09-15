@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 22, 2026
-Modified: Aug 01, 2026
+Modified: Sep 15, 2026
 Module: code_editor.core.find
 Execute: from code_editor.core import find
 
@@ -626,6 +626,9 @@ class FindReplace(qt.QWidget):
         self._replacing = True
         cursor.insertText(self._replacement(cursor.selectedText()))
         self._replacing = False
+        # - the caret goes past what was written, or the re-search would settle on the same spot again
+        #   whenever the replacement contains the query (foo -> foobar) and Replace would loop on it
+        self.editor.setTextCursor(cursor)
         self.search()
 
     def do_replace_all(self) -> None:

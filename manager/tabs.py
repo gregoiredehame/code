@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Wed 11, 2024
-Modified: Aug 26, 2026
+Modified: Sep 15, 2026
 Module: code_editor.manager.tabs
 Execute: from code_editor.manager import tabs
 """
@@ -14,6 +14,8 @@ from ... import __icons__, qt
 from .... import core as kcore
 
 from ..core import editor
+from ..core import find
+from ..core import qt as editor_qt
 
 # from importlib import reload
 # reload(editor)
@@ -580,21 +582,25 @@ class CodeWidget(qt.QWidget):
         self.code.text_has_been_changed.connect(self.text_has_been_changed)
         self.code.savingScript.connect(self.savingScript)
 
-        self.search_bar = editor.SearchReplaceBar(self.code)
+        # - the same floating find / replace panel as the standalone editor window (core.find), over the
+        #   editor's top-right corner: it re-searches without moving the caret when the text changes, replaces
+        #   backwards in one undo step, takes Enter in the replace field, scopes to a multi-line selection,
+        #   and offers whole word / regex / preserve case. Styled on its own since the manager has no theme.
+        self.search = find.FindReplace(self.code)
+        self.search.setStyleSheet(editor_qt.stylesheet())
 
         self.mainLayout = qt.QGridLayout(self)
         self.mainLayout.setContentsMargins(0, 0, 0, 0)
         self.mainLayout.setSpacing(0)
         self.mainLayout.addWidget(self.code, 0, 0)
-        self.mainLayout.addWidget(self.search_bar, 1, 0)
 
         shortcut_find = qt.QShortcut(qt.QKeySequence("Ctrl+F"), self)
         shortcut_find.setContext(qt.Qt.WidgetWithChildrenShortcut)
-        shortcut_find.activated.connect(lambda: self.search_bar.show_bar('search'))
+        shortcut_find.activated.connect(lambda: self.search.show_panel())
 
         shortcut_replace = qt.QShortcut(qt.QKeySequence("Ctrl+H"), self)
         shortcut_replace.setContext(qt.Qt.WidgetWithChildrenShortcut)
-        shortcut_replace.activated.connect(lambda: self.search_bar.show_bar('replace'))
+        shortcut_replace.activated.connect(lambda: self.search.show_panel(replace=True))
 
         shortcut_esc = qt.QShortcut(qt.QKeySequence("Escape"), self)
         shortcut_esc.setContext(qt.Qt.WidgetWithChildrenShortcut)
@@ -608,8 +614,8 @@ class CodeWidget(qt.QWidget):
         Returns:
             None.
         """
-        if self.search_bar.isVisible():
-            self.search_bar.close_bar()
+        if self.search.isVisible():
+            self.search.close_panel()
 
     def closeEvent(self, event=None) -> None:
         """Prompt to save unsaved changes before the tab closes.

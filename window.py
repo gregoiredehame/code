@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Modified: Sep 08, 2026
+Modified: Sep 15, 2026
 Module: code_editor.window
 Execute: from code_editor import window
 
@@ -416,6 +416,77 @@ class EditorPage(qt.QWidget):
         escape.activated.connect(self._escape)
 
         self.code.document().setModified(False)
+        self._disk_stamp = self.disk_stamp()
+
+    def disk_stamp(self) -> tuple:
+        """What the file on disk looks like right now.
+
+        The size rides along with the timestamp, and the timestamp is read in nanoseconds rather than
+        as a float, because two quick writes of the same length can otherwise land on one stamp and
+        the second one would go unnoticed.
+
+        Returns:
+            tuple: the file's modification time and its size, or None when no file is there.
+        """
+        if not self.file_path:
+            return None
+        try:
+            stat = os.stat(self.file_path)
+        except OSError:
+            return None
+        return (stat.st_mtime_ns, stat.st_size)
+
+    def disk_state(self) -> str:
+        """How the file on disk stands against what this page last read from it.
+
+        Returns:
+            str: "changed", "deleted", or "same", which also covers a tab with no file at all.
+        """
+        if not self.file_path:
+            return "same"
+        stamp = self.disk_stamp()
+        if stamp is None:
+            return "deleted" if self._disk_stamp is not None else "same"
+        return "same" if stamp == self._disk_stamp else "changed"
+
+    def forget_disk_change(self) -> None:
+        """Take the file as it stands as the state to compare against, without touching the text.
+
+        This is what keeping your own version does: the same change must not be asked about again
+        every time the window comes back.
+
+        Returns:
+            None.
+        """
+        self._disk_stamp = self.disk_stamp()
+
+    def reload_from_disk(self) -> bool:
+        """Read the file again, leaving the caret and the scroll where they were.
+
+        Returns:
+            bool: True when the file was read back in.
+        """
+        if not (self.file_path and os.path.isfile(self.file_path)):
+            return False
+        try:
+            content = compat.folder.read(self.file_path)
+        except Exception as exception:
+            compat.message.critical(title="Reload Error", buttons=["Close"],
+                                    message_text='Could not read "%s" back.'% self.name(),
+                                    informative_text=str(exception), parent=self)
+            return False
+        cursor = self.code.textCursor()
+        line, column = cursor.blockNumber(), cursor.positionInBlock()
+        scroll = self.code.verticalScrollBar().value()
+        self.code.setPlainText(content)
+        block = self.code.document().findBlockByNumber(min(line, self.code.document().blockCount() - 1))
+        moved = self.code.textCursor()
+        moved.setPosition(block.position() + min(column, max(0, block.length() - 1)))
+        self.code.setTextCursor(moved)
+        self.code.verticalScrollBar().setValue(min(scroll, self.code.verticalScrollBar().maximum()))
+        self.code.document().setModified(False)
+        self._disk_stamp = self.disk_stamp()
+        return True
 
     def _escape(self) -> None:
         """Escape backs out one thing at a time: the extra carets first, then the find panel.
@@ -474,6 +545,7 @@ class EditorPage(qt.QWidget):
             self.file_path = path
             self.code.file_path = path
             self.code.document().setModified(False)
+            self._disk_stamp = self.disk_stamp()
             return True
         except Exception as exception:
             compat.message.critical(title="Save Error", buttons=["Close"],
@@ -4833,7 +4905,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     window_instance = None
     title           = "Code Editor"
-    version         = "0.2.2"
+    version         = "0.2.3"
 
     sessionStored = qt.signal(object)      # the layout that was just written, for embedders to mirror
 
@@ -5148,6 +5220,112 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
         # large repository here would hold the window back before anything is on screen. Deferred, it
         # opens at once and the change list and its badge fill in a moment later.
         qt.QTimer.singleShot(0, self._first_scan)
+
+        # a file edited outside the editor is caught when the window comes back to the front rather
+        # than by polling: the check is one stat per open tab, only worth doing at that moment. Both
+        # routes are wired because which one fires depends on how the editor runs, the application
+        # state while it sits docked inside maya, the activation event while it is a window of its own.
+        self._disk_check_open = False
+        self._disk_check_timer = qt.QTimer(self)
+        self._disk_check_timer.setSingleShot(True)
+        self._disk_check_timer.setInterval(120)        # coalesce the two routes into a single question
+        self._disk_check_timer.timeout.connect(self.check_disk_changes)
+        application = qt.QApplication.instance()
+        if application is not None and hasattr(application, "applicationStateChanged"):
+            application.applicationStateChanged.connect(self._on_application_state)
+
+    def _ask_disk_check(self) -> None:
+        """Queue a disk check, quietly doing nothing while the window is still being built.
+
+        Returns:
+            None.
+        """
+        timer = getattr(self, "_disk_check_timer", None)
+        if timer is not None and self.isVisible():
+            timer.start()
+
+    def _on_application_state(self, state=None) -> None:
+        """Queue a disk check once the whole application is in front again.
+
+        Args:
+            state: (object): - the new application state.
+
+        Returns:
+            None.
+        """
+        if state == getattr(qt.Qt, "ApplicationActive", None):
+            self._ask_disk_check()
+
+    def changeEvent(self, event) -> None:
+        """Queue a disk check when this window itself becomes the active one.
+
+        Returns:
+            None.
+        """
+        super().changeEvent(event)
+        if event.type() == qt.QtCore.QEvent.ActivationChange and self.isActiveWindow():
+            self._ask_disk_check()
+
+    def check_disk_changes(self) -> None:
+        """Look at every open file and offer to take the version on disk of the ones that moved.
+
+        Files edited elsewhere are gathered into ONE question rather than a box per tab, and any page
+        holding unsaved edits is named inside it, since reloading throws those away. A file that has
+        gone from disk is its own question with its own answer: keeping the tab open is the only way
+        back to the text.
+
+        Returns:
+            None.
+        """
+        if getattr(self, "_disk_check_open", False):
+            return
+        pages = [page for page in self._all_pages() if isinstance(page, EditorPage) and page.file_path]
+        changed = [page for page in pages if page.disk_state() == "changed"]
+        deleted = [page for page in pages if page.disk_state() == "deleted"]
+        if not (changed or deleted):
+            return
+        self._disk_check_open = True
+        try:
+            if changed:
+                names = ", ".join(page.name() for page in changed)
+                if len(changed) == 1:
+                    message_text = '"%s" has changed on disk.'% names
+                else:
+                    message_text = "%d open files have changed on disk: %s"% (len(changed), names)
+                dirty = [page.name() for page in changed if page.is_modified()]
+                informative_text = "Reload takes the version on disk."
+                if dirty:
+                    informative_text = "Reload takes the version on disk and throws away your unsaved edits in %s."% ", ".join(dirty)
+                answer = compat.message.warning(title="File Changed", buttons=["Reload", "Keep Mine"],
+                                                message_text=message_text, informative_text=informative_text,
+                                                parent=self)
+                for page in changed:
+                    if answer == "Reload":
+                        page.reload_from_disk()
+                    else:
+                        page.forget_disk_change()      # answered once, do not ask again for this change
+                if answer == "Reload":
+                    self._problems_timer.start()
+
+            if deleted:
+                names = ", ".join(page.name() for page in deleted)
+                if len(deleted) == 1:
+                    message_text = '"%s" is gone from disk.'% names
+                else:
+                    message_text = "%d open files are gone from disk: %s"% (len(deleted), names)
+                answer = compat.message.warning(title="File Deleted", buttons=["Close Tab", "Keep Open"],
+                                                message_text=message_text,
+                                                informative_text="Keeping the tab open leaves its text here, with nowhere to save it back to.",
+                                                parent=self)
+                for page in deleted:
+                    if answer == "Close Tab":
+                        page.code.document().setModified(False)   # gone from disk, nothing to save it into
+                        if self._focus_page(page):
+                            self.close_tab(self.tabs.currentIndex())
+                    else:
+                        page.forget_disk_change()
+        finally:
+            self._disk_check_open = False
 
     # ------------------------------------------------------------------ tabs
 
