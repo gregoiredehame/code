@@ -3,7 +3,7 @@ CODE EDITOR.
 
 Author: Gregoire Dehame
 Created: Jul 21, 2026
-Modified: Aug 01, 2026
+Modified: Sep 15, 2026
 Module: code_editor.main
 Execute: from code_editor import main
 
@@ -132,9 +132,25 @@ def _build_menu(menu:str) -> None:
     if not command:
         return
     if callable(command):
-        command()
-    else:
-        mel.eval(command)
+        try:
+            command()
+        except Exception:
+            pass
+        return
+    # - what comes back is whatever was set on the menu, and that is not always a statement mel can run:
+    #   a studio startup or another tool may have re-wrapped it, and one stray brace at its end (seen as
+    #   `buildViewMenu("MayaWindow|mainWindowMenu")}`) is a syntax error. The menu's own builder is what
+    #   matters, so the string is tried as it is, then with its wrapping stripped, then the builder is
+    #   called by name; a menu that will not build is left to _find_submenu to report, not raised on.
+    attempts = [command, command.strip().strip("{};" + chr(32) + chr(10) + chr(13)), 'buildViewMenu "%s"' % menu]
+    for attempt in attempts:
+        if not attempt:
+            continue
+        try:
+            mel.eval(attempt)
+            return
+        except Exception:
+            continue
 
 
 def _find_submenu(menu:str, label:str) -> str:

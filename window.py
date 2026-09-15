@@ -4905,7 +4905,7 @@ class Editor(MayaQWidgetDockableMixin, qt.QWidget):
 
     window_instance = None
     title           = "Code Editor"
-    version         = "0.2.3"
+    version         = "0.2.4"
 
     sessionStored = qt.signal(object)      # the layout that was just written, for embedders to mirror
 
